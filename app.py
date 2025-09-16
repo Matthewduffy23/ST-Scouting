@@ -378,7 +378,7 @@ def plot_attacker_polar_chart(player: pd.DataFrame):
     # Header & subheader
     team = str(player["Team"].iloc[0]) if "Team" in player.columns else ""
     league = str(player["League"].iloc[0]) if "League" in player.columns else ""
-    fig.text(0.06, 0.94, f"{player_name} — Attacking Profile", fontsize=16, weight='bold', ha='left', color='#111827')
+    fig.text(0.06, 0.94, f"{player_name} — Peformance", fontsize=16, weight='bold', ha='left', color='#111827')
     fig.text(0.06, 0.915, f"Percentile Rank vs Position in league: {league} | Team: {team}", fontsize=9, ha='left', color='#6b7280')
 
     return fig
