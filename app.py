@@ -1,14 +1,8 @@
-# app.py — Advanced Scouting Tool with attacker polar percentile chart
-# - Filters: minutes, age, contract, league strength, market value, min performance
-# - Role scoring with optional league weighting
-# - 4 result tabs per role
-# - Single-player profile + Elche-style polar percentile chart for attackers
-
+# app.py — Advanced Scouting Tool (presets, colored role table, scatter, player summary)
 import streamlit as st
 import pandas as pd
 import numpy as np
 from pathlib import Path
-import io
 import math
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
@@ -24,23 +18,26 @@ INCLUDED_LEAGUES = [
     'Bulgaria 1.', 'Canada 1.', 'Chile 1.', 'Colombia 1.', 'Costa Rica 1.',
     'Croatia 1.', 'Cyprus 1.', 'Czech 1.', 'Czech 2.', 'Denmark 1.', 'Denmark 2.',
     'Ecuador 1.', 'Egypt 1.', 'Estonia 1.', 'Finland 1.', 'France 1.', 'France 2.',
-    'France 3.', 'Georgia 1.', 'Germany 1.', 'Germany 2.', 'Germany 3.',
-    'Germany 4.', 'Greece 1.', 'Hungary 1.', 'Iceland 1.', 'Israel 1.',
-    'Israel 2.', 'Italy 1.', 'Italy 2.', 'Italy 3.', 'Japan 1.', 'Japan 2.',
-    'Kazakhstan 1.', 'Korea 1.', 'Latvia 1.', 'Lithuania 1.', 'Malta 1.',
-    'Mexico 1.', 'Moldova 1.', 'Morocco 1.', 'Netherlands 1.', 'Netherlands 2.',
-    'North Macedonia 1.', 'Northern Ireland 1.', 'Norway 1.', 'Norway 2.',
-    'Paraguay 1.', 'Peru 1.', 'Poland 1.', 'Poland 2.', 'Portugal 1.',
-    'Portugal 2.', 'Portugal 3.', 'Qatar 1.', 'Ireland 1.', 'Romania 1.',
-    'Russia 1.', 'Saudi 1.', 'Scotland 1.', 'Scotland 2.', 'Scotland 3.',
-    'Serbia 1.', 'Serbia 2.', 'Slovakia 1.', 'Slovakia 2.', 'Slovenia 1.',
-    'Slovenia 2.', 'South Africa 1.', 'Spain 1.', 'Spain 2.', 'Spain 3.',
-    'Sweden 1.', 'Sweden 2.', 'Switzerland 1.', 'Switzerland 2.', 'Tunisia 1.',
-    'Turkey 1.', 'Turkey 2.', 'Ukraine 1.', 'UAE 1.', 'USA 1.', 'USA 2.',
-    'Uruguay 1.', 'Uzbekistan 1.', 'Venezuela 1.', 'Wales 1.'
+    'France 3.', 'Georgia 1.', 'Germany 1.', 'Germany 2.', 'Germany 3.', 'Germany 4.',
+    'Greece 1.', 'Hungary 1.', 'Iceland 1.', 'Israel 1.', 'Israel 2.',
+    'Italy 1.', 'Italy 2.', 'Italy 3.', 'Japan 1.', 'Japan 2.', 'Kazakhstan 1.',
+    'Korea 1.', 'Latvia 1.', 'Lithuania 1.', 'Malta 1.', 'Mexico 1.', 'Moldova 1.',
+    'Morocco 1.', 'Netherlands 1.', 'Netherlands 2.', 'North Macedonia 1.',
+    'Northern Ireland 1.', 'Norway 1.', 'Norway 2.', 'Paraguay 1.', 'Peru 1.',
+    'Poland 1.', 'Poland 2.', 'Portugal 1.', 'Portugal 2.', 'Portugal 3.', 'Qatar 1.',
+    'Ireland 1.', 'Romania 1.', 'Russia 1.', 'Saudi 1.', 'Scotland 1.',
+    'Scotland 2.', 'Scotland 3.', 'Serbia 1.', 'Serbia 2.', 'Slovakia 1.',
+    'Slovakia 2.', 'Slovenia 1.', 'Slovenia 2.', 'South Africa 1.',
+    'Spain 1.', 'Spain 2.', 'Spain 3.', 'Sweden 1.', 'Sweden 2.',
+    'Switzerland 1.', 'Switzerland 2.', 'Tunisia 1.', 'Turkey 1.', 'Turkey 2.',
+    'Ukraine 1.', 'UAE 1.', 'USA 1.', 'USA 2.', 'Uruguay 1.', 'Uzbekistan 1.',
+    'Venezuela 1.', 'Wales 1.',
+    # English pyramid convenience names used in presets
+    'England 1.', 'England 2.', 'England 3.', 'England 4.', 'England 5.',
+    'England 6.', 'England 7.', 'England 8.', 'England 9.', 'England 10.',
 ]
 
-# Feature columns present in your dataset
+# Feature columns
 FEATURES = [
     'Defensive duels per 90', 'Defensive duels won, %',
     'Aerial duels per 90', 'Aerial duels won, %',
@@ -54,14 +51,13 @@ FEATURES = [
     'Deep completions per 90', 'Smart passes per 90',
 ]
 
-# --- Attacker polar chart metrics + label cleaner ---
+# Attacker polar chart metrics
 POLAR_METRICS = [
     "Non-penalty goals per 90","xG per 90","Shots per 90",
     "Dribbles per 90","Passes to penalty area per 90","Touches in box per 90",
     "Aerial duels per 90","Aerial duels won, %","Passes per 90",
     "Accurate passes, %","xA per 90","Progressive runs per 90",
 ]
-
 def clean_attacker_label(s: str) -> str:
     s = s.replace("Non-penalty goals per 90", "Non-Pen Goals")
     s = s.replace("xG per 90", "xG").replace("xA per 90", "xA")
@@ -74,20 +70,21 @@ def clean_attacker_label(s: str) -> str:
     s = s.replace("Accurate passes, %", "Pass %")
     return s
 
+# Roles
 ROLES = {
     'Target Man CF': {
-        'desc': "Aerial outlet, duel dominance, occupy CBs, threaten crosses & second balls.",
+        'desc': "Aerial outlet; duel dominance; attack crosses & second balls.",
         'metrics': { 'Aerial duels per 90': 3, 'Aerial duels won, %': 4 }
     },
     'Goal Threat CF': {
-        'desc': "High shot & xG volume, box presence, consistent SoT and finishing.",
+        'desc': "High shot & xG volume; strong box presence; efficient finishing.",
         'metrics': {
             'Non-penalty goals per 90': 3, 'Shots per 90': 1.5,
             'xG per 90': 3, 'Touches in box per 90': 1, 'Shots on target, %': 0.5
         }
     },
     'Link-Up CF': {
-        'desc': "Wall passes, entries to PA, combine & create under pressure.",
+        'desc': "Combine & create; link play; progress & deliver to the penalty area.",
         'metrics': {
             'Passes per 90': 2, 'Passes to penalty area per 90': 1.5,
             'Deep completions per 90': 1, 'Smart passes per 90': 1.5,
@@ -97,11 +94,12 @@ ROLES = {
         }
     },
     'All in': {
-        'desc': "Blend of creation + scoring; balanced all-round attacking profile.",
+        'desc': "Balanced blend of scoring, carrying and creation.",
         'metrics': { 'xA per 90': 2, 'Dribbles per 90': 2, 'xG per 90': 3, 'Non-penalty goals per 90': 3 }
     }
 }
 
+# League strengths
 LEAGUE_STRENGTHS = {
     'England 1.':100.00,'Italy 1.':97.14,'Spain 1.':94.29,'Germany 1.':94.29,'France 1.':91.43,
     'Brazil 1.':82.86,'England 2.':71.43,'Portugal 1.':71.43,'Argentina 1.':71.43,
@@ -125,9 +123,17 @@ LEAGUE_STRENGTHS = {
     'Scotland 2.':28.57,'Moldova 1.':28.57,'Austria 2.':25.71,'Lithuania 1.':25.71,'Brazil 3.':25.00,
     'England 7.':25.00,'Slovenia 2.':22.00,'Latvia 1.':22.86,'Serbia 2.':20.00,'Slovakia 2.':20.00,
     'England 9.':20.00,'England 8.':15.00,'Montenegro 1.':14.29,'Wales 1.':12.00,'Portugal 3.':11.43,
-    'Northern Ireland 1.':11.43,'England 9.':12.00,'Andorra 1.':10.00,'Estonia 1.':23.00,
-    'England 10.':10.00,'Scotland 3.':10.00,'England 6.':10.00
+    'Northern Ireland 1.':11.43,'Andorra 1.':10.00,'Estonia 1.':23.00,'England 10.':10.00,'Scotland 3.':10.00,'England 6.':10.00
 }
+
+PRESET_TOP5 = {'England 1.','France 1.','Germany 1.','Italy 1.','Spain 1.'}
+PRESET_TOP20 = {
+    'England 1.','Italy 1.','Spain 1.','Germany 1.','France 1.',
+    'England 2.','Portugal 1.','Belgium 1.','Turkey 1.','Germany 2.',
+    'Spain 2.','France 2.','Netherlands 1.','Austria 1.','Switzerland 1.',
+    'Denmark 1.','Croatia 1.','Italy 2.','Czech 1.','Norway 1.'
+}
+PRESET_EFL = {'England 2.','England 3.','England 4.'}
 
 REQUIRED_BASE = {"Player","Team","League","Age","Position","Minutes played","Market value","Contract expires","Goals"}
 
@@ -149,7 +155,20 @@ with st.sidebar:
     st.header("Filters")
 
     leagues_avail = sorted(set(INCLUDED_LEAGUES) | set(df.get("League", pd.Series([])).dropna().unique()))
-    leagues_sel = st.multiselect("Leagues", leagues_avail, default=INCLUDED_LEAGUES)
+
+    # Presets that you can combine, plus manual multiselect
+    c1, c2, c3 = st.columns(3)
+    use_top5  = c1.checkbox("Top-5", False, help="ENG1, FRA1, GER1, ITA1, ESP1")
+    use_top20 = c2.checkbox("Top-20", False)
+    use_efl   = c3.checkbox("EFL", False, help="ENG2–ENG4")
+
+    preset = set()
+    if use_top5:  preset |= PRESET_TOP5
+    if use_top20: preset |= PRESET_TOP20
+    if use_efl:   preset |= PRESET_EFL
+
+    leagues_sel = st.multiselect("Leagues (add or prune the presets)", leagues_avail,
+                                 default=sorted(preset) if preset else leagues_avail)
 
     df["Minutes played"] = pd.to_numeric(df["Minutes played"], errors="coerce")
     df["Age"] = pd.to_numeric(df["Age"], errors="coerce")
@@ -180,11 +199,13 @@ with st.sidebar:
         max_value = mv_max_m * 1_000_000
     else:
         min_value, max_value = st.slider("Range (€)", 0, mv_cap, (0, mv_cap), step=100_000)
-    value_band_max = st.number_input("Value band (tab 4 max €)", min_value=0, value=min_value if min_value>0 else 5_000_000, step=250_000)
+    value_band_max = st.number_input("Value band (tab 4 max €)", min_value=0,
+                                     value=min_value if min_value>0 else 5_000_000, step=250_000)
 
     st.subheader("Minimum performance thresholds")
     enable_min_perf = st.checkbox("Require minimum percentile on selected metrics", value=False)
-    sel_metrics = st.multiselect("Metrics to threshold", FEATURES[:], default=['Non-penalty goals per 90','xG per 90'] if enable_min_perf else [])
+    sel_metrics = st.multiselect("Metrics to threshold", FEATURES[:],
+                                 default=['Non-penalty goals per 90','xG per 90'] if enable_min_perf else [])
     min_pct = st.slider("Minimum percentile (0–100)", 0, 100, 60)
 
     top_n = st.number_input("Top N per table", 5, 200, 50, 5)
@@ -214,23 +235,21 @@ if apply_contract:
 
 df_f["League Strength"] = df_f["League"].map(LEAGUE_STRENGTHS).fillna(0.0)
 df_f = df_f[(df_f["League Strength"] >= float(min_strength)) & (df_f["League Strength"] <= float(max_strength))]
-
 df_f = df_f[(df_f["Market value"] >= min_value) & (df_f["Market value"] <= max_value)]
 
 if df_f.empty:
-    st.warning("No players after filters. Loosen filters.")
+    st.warning("No players after filters. Loosen filters or adjust presets.")
     st.stop()
 
 # ----------------- PERCENTILES (per league) -----------------
 for c in FEATURES:
     df_f[c] = pd.to_numeric(df_f[c], errors="coerce")
 df_f = df_f.dropna(subset=FEATURES)
-
 for feat in FEATURES:
     df_f[f"{feat} Percentile"] = df_f.groupby("League")[feat].transform(lambda x: x.rank(pct=True) * 100.0)
 
 # ----------------- ROLE SCORING -----------------
-def compute_weighted_role_score(df_in: pd.DataFrame, role_name: str, metrics: dict, beta: float, league_weighting: bool) -> pd.Series:
+def compute_weighted_role_score(df_in: pd.DataFrame, metrics: dict, beta: float, league_weighting: bool) -> pd.Series:
     total_w = sum(metrics.values()) if metrics else 1.0
     wsum = np.zeros(len(df_in))
     for m, w in metrics.items():
@@ -238,19 +257,13 @@ def compute_weighted_role_score(df_in: pd.DataFrame, role_name: str, metrics: di
         if col in df_in.columns:
             wsum += df_in[col].values * w
     player_score = wsum / total_w  # 0..100
-
     if league_weighting:
         league_scaled = (df_in["League Strength"].fillna(50) / 100.0) * 100.0
-        final = (1 - beta) * player_score + beta * league_scaled
-    else:
-        final = player_score
-
-    return final
+        return (1 - beta) * player_score + beta * league_scaled
+    return player_score
 
 for role_name, role_def in ROLES.items():
-    df_f[f"{role_name} Score"] = compute_weighted_role_score(
-        df_f, role_name, role_def["metrics"], beta=beta, league_weighting=use_league_weighting
-    )
+    df_f[f"{role_name} Score"] = compute_weighted_role_score(df_f, role_def["metrics"], beta, use_league_weighting)
 
 # ----------------- MINIMUM PERFORMANCE THRESHOLDS -----------------
 if enable_min_perf and sel_metrics:
@@ -291,26 +304,31 @@ def filtered_view(df_in: pd.DataFrame, *, age_max=None, contract_year=None, valu
 tabs = st.tabs(["Overall Top N", "U23 Top N", "Expiring Contracts", "Value Band (≤ max €)"])
 
 for role, role_def in ROLES.items():
-    st.markdown(f"### Role: **{role}** {'(league-weighted)' if use_league_weighting else '(unweighted)'}")
-    st.caption(role_def.get("desc", ""))
-
+    # Put the role title & description inside each tab section header
     t1, t2, t3, t4 = tabs
 
     with t1:
-        st.markdown(f"**Overall Top {int(top_n)}**")
+        st.markdown(f"### {role} — Overall Top {int(top_n)}")
+        st.caption(role_def.get("desc", ""))
         st.dataframe(top_table(df_f, role, int(top_n)), use_container_width=True)
 
     with t2:
+        st.markdown(f"### {role} — U23 Top {int(top_n)}")
+        st.caption(role_def.get("desc", ""))
         u23_cutoff = st.number_input(f"U23 cutoff for {role}", min_value=16, max_value=30, value=23, step=1, key=f"u23_{role}")
         view = filtered_view(df_f, age_max=u23_cutoff)
         st.dataframe(top_table(view, role, int(top_n)), use_container_width=True)
 
     with t3:
+        st.markdown(f"### {role} — Expiring by Year")
+        st.caption(role_def.get("desc", ""))
         exp_year = st.number_input(f"Expiring by year for {role}", min_value=2024, max_value=2030, value=cutoff_year, step=1, key=f"exp_{role}")
         view = filtered_view(df_f, contract_year=exp_year)
         st.dataframe(top_table(view, role, int(top_n)), use_container_width=True)
 
     with t4:
+        st.markdown(f"### {role} — Value Band (≤ € max)")
+        st.caption(role_def.get("desc", ""))
         v_max = st.number_input(f"Max value (€) for {role}", min_value=0, value=value_band_max, step=100_000, key=f"val_{role}")
         view = filtered_view(df_f, value_max=v_max)
         st.dataframe(top_table(view, role, int(top_n)), use_container_width=True)
@@ -323,41 +341,34 @@ player_name = st.selectbox("Choose player", sorted(df_f["Player"].unique()))
 player_row = df_f[df_f["Player"] == player_name].head(1)
 
 def plot_attacker_polar_chart(player: pd.DataFrame):
-    # Collect available metrics + percentiles (0..100)
     metrics = [m for m in POLAR_METRICS if f"{m} Percentile" in df_f.columns]
     if not metrics:
         return None
-
     vals = [float(player[f"{m} Percentile"].iloc[0]) for m in metrics]
     labels = [clean_attacker_label(m) for m in metrics]
     N = len(metrics)
 
-    # Colors: deep red → green gradient (your palette)
     color_scale = ["#be2a3e", "#e25f48", "#f88f4d", "#f4d166", "#90b960", "#4b9b5f", "#22763f"]
     cmap = LinearSegmentedColormap.from_list("custom_scale", color_scale)
     bar_colors = [cmap(v/100.0) for v in vals]
 
-    # Angles: clockwise, start near 1 o'clock
     angles = np.linspace(0, 2*np.pi, N, endpoint=False)[::-1]
     rotation_shift = np.deg2rad(75) - angles[0]
     ang = (angles + rotation_shift) % (2*np.pi)
     width = 2*np.pi / N
 
-    # Figure
     fig = plt.figure(figsize=(8.2, 6.6), dpi=180)
-    fig.patch.set_facecolor('#f3f4f6')       # light gray page
+    fig.patch.set_facecolor('#f3f4f6')
     ax = fig.add_axes([0.06, 0.08, 0.88, 0.74], polar=True)
     ax.set_facecolor('#f3f4f6')
     ax.set_rlim(0, 100)
 
-    # Bars + inside value labels
     for i in range(N):
         ax.bar(ang[i], vals[i], width=width, color=bar_colors[i], edgecolor='black', linewidth=1.0, zorder=3)
-        label_pos = max(12, vals[i] * 0.75)  # keep readable
+        label_pos = max(12, vals[i] * 0.75)
         ax.text(ang[i], label_pos, f"{int(round(vals[i]))}", ha='center', va='center',
                 fontsize=9, weight='bold', color='white', zorder=4)
 
-    # Outer ring and quadrant dividers
     outer = plt.Circle((0, 0), 100, transform=ax.transData._b, color='black', fill=False, linewidth=2.2, zorder=5)
     ax.add_artist(outer)
     for i in range(N):
@@ -366,22 +377,27 @@ def plot_attacker_polar_chart(player: pd.DataFrame):
         ax.plot([sep_angle, sep_angle], [0, 100], color='black' if is_cross else '#b0b0b0',
                 linewidth=1.6 if is_cross else 1.0, zorder=2)
 
-    # Metric labels outside ring
     label_r = 120
     for i, lab in enumerate(labels):
         ax.text(ang[i], label_r, lab, ha='center', va='center', fontsize=8.5, weight='bold', color='#111827', zorder=6)
 
-    # Cleanup
-    ax.set_xticks([]); ax.set_yticks([])
-    ax.spines['polar'].set_visible(False); ax.grid(False)
+    ax.set_xticks([]); ax.set_yticks([]); ax.spines['polar'].set_visible(False); ax.grid(False)
 
-    # Header & subheader
     team = str(player["Team"].iloc[0]) if "Team" in player.columns else ""
     league = str(player["League"].iloc[0]) if "League" in player.columns else ""
-    fig.text(0.06, 0.94, f"{player_name} — Peformance", fontsize=16, weight='bold', ha='left', color='#111827')
-    fig.text(0.06, 0.915, f"Percentile Rank vs Position in league: {league} | Team: {team}", fontsize=9, ha='left', color='#6b7280')
-
+    fig.text(0.06, 0.94, f"{player_name} — Performance Profile", fontsize=16, weight='bold', ha='left', color='#111827')
+    fig.text(0.06, 0.915, f"Percentile Rank vs position peers in {league} | Team: {team}", fontsize=9, ha='left', color='#6b7280')
     return fig
+
+def style_role_table(df_roles: pd.DataFrame):
+    # red → gold → green colormap over 0–100
+    cmap = LinearSegmentedColormap.from_list("rg", ["#dc2626","#f59e0b","#16a34a"])
+    def bg(v):
+        # convert 0..100 to rgba hex via cmap
+        rgba = cmap(v/100 if pd.notna(v) else 0.5)
+        r,g,b,a = [int(255*x) for x in rgba[:3]] + [rgba[3]]
+        return f"background-color: rgba({r},{g},{b},0.25)"
+    return df_roles.style.format({"Percentile":"{:.0f}"}).applymap(bg, subset=["Percentile"])
 
 if player_row.empty:
     st.info("Pick a player above.")
@@ -393,13 +409,14 @@ else:
         f"League Strength {meta['League Strength']:.1f} • Value €{meta['Market value']:,.0f}"
     )
 
-    # Role score table
+    # Role scores table (colored)
     rows = []
     for role in ROLES.keys():
         col = f"{role} Score"
         score = player_row[col].iloc[0] if col in player_row.columns else np.nan
-        rows.append({"Role": role, "Percentile": int(round(score)) if pd.notna(score) else None})
-    st.dataframe(pd.DataFrame(rows), use_container_width=True)
+        rows.append({"Role": role, "Percentile": float(score) if pd.notna(score) else np.nan})
+    role_df = pd.DataFrame(rows)
+    st.dataframe(style_role_table(role_df), use_container_width=True)
 
     # Attacker polar chart
     fig = plot_attacker_polar_chart(player_row)
@@ -408,6 +425,85 @@ else:
     else:
         st.info("Not enough attacker metrics available to draw the polar chart.")
 
+# ----------------- SCATTERPLOT: NPG/90 vs xG/90 -----------------
+st.subheader("📈 Shot Output: Non-pen Goals/90 vs xG/90")
+sc_leagues = st.multiselect("Scatter leagues (defaults to current selection)", sorted(df_f["League"].unique()),
+                            default=sorted(df_f["League"].unique()), key="sc_leagues")
+sc_age_min, sc_age_max = st.slider("Scatter age filter", int(df_f["Age"].min()), int(df_f["Age"].max()),
+                                   (int(df_f["Age"].min()), int(df_f["Age"].max())), key="sc_age")
+
+sc = df_f[
+    (df_f["League"].isin(sc_leagues)) &
+    (df_f["Age"].between(sc_age_min, sc_age_max))
+].copy()
+
+if sc.empty:
+    st.info("No data for the scatter filters.")
+else:
+    x = sc["xG per 90"].astype(float).values
+    y = sc["Non-penalty goals per 90"].astype(float).values
+    sizes = np.clip(sc["Minutes played"].astype(float).values / 90.0, 5, 60)  # bubble ~ matches
+    colors = sc["League Strength"].astype(float).values
+
+    fig2, ax2 = plt.subplots(figsize=(7.5, 5.2), dpi=160)
+    sc_plot = ax2.scatter(x, y, s=sizes, c=colors, cmap="viridis", alpha=0.75, edgecolor="k", linewidth=0.4)
+    ax2.set_xlabel("xG per 90")
+    ax2.set_ylabel("Non-penalty goals per 90")
+    ax2.set_title("Shot quality vs output (bubble ~ minutes/90, color = league strength)")
+    cbar = plt.colorbar(sc_plot, ax=ax2, fraction=0.045, pad=0.02)
+    cbar.set_label("League Strength")
+    # highlight selected player if present
+    if player_name in sc["Player"].values:
+        pr = sc[sc["Player"] == player_name].iloc[0]
+        ax2.scatter([pr["xG per 90"]], [pr["Non-penalty goals per 90"]], s=120, facecolors='none',
+                    edgecolors='#ef4444', linewidths=2.0, zorder=5)
+        ax2.annotate(player_name, (pr["xG per 90"], pr["Non-penalty goals per 90"]),
+                     textcoords="offset points", xytext=(8,8), fontsize=9, weight="bold", color="#ef4444")
+    st.pyplot(fig2, use_container_width=True)
+
+# ----------------- PLAYER SUMMARY (rule-based notes) -----------------
+def player_summary(row: pd.Series) -> str:
+    # Use percentiles for key attacking metrics
+    keys = [
+        ("Non-penalty goals per 90", "finishing threat"),
+        ("xG per 90", "chance volume"),
+        ("Shots per 90", "shot volume"),
+        ("Touches in box per 90", "box presence"),
+        ("Dribbles per 90", "carrying"),
+        ("Successful dribbles, %", "dribble efficiency"),
+        ("Progressive runs per 90", "progression"),
+        ("xA per 90", "creative output"),
+        ("Passes to penalty area per 90", "final-third delivery"),
+        ("Aerial duels won, %", "aerial effectiveness"),
+    ]
+    strengths, dev, notes = [], [], []
+    for col, tag in keys:
+        pcol = f"{col} Percentile"
+        if pcol in row.index and pd.notna(row[pcol]):
+            v = float(row[pcol])
+            if v >= 75: strengths.append(tag)
+            elif v <= 35: dev.append(tag)
+    # Best role
+    best_role, best_score = None, -1
+    for role in ROLES.keys():
+        col = f"{role} Score"
+        if col in row.index and pd.notna(row[col]) and row[col] > best_score:
+            best_score, best_role = row[col], role
+    # Build text
+    segs = []
+    segs.append(f"{row['Player']} ({int(row['Age'])}) in {row['League']} for {row['Team']}.")
+    if strengths: segs.append("Strengths: " + ", ".join(strengths) + ".")
+    if dev: segs.append("Areas to develop: " + ", ".join(dev) + ".")
+    if best_role is not None: segs.append(f"Most aligned role profile: **{best_role}** (~{int(round(best_score))}th pct).")
+    segs.append(f"League strength {row['League Strength']:.1f}; minutes {int(row['Minutes played'])}.")
+    return " ".join(segs)
+
+st.subheader("📝 Player Notes")
+if not player_row.empty:
+    st.markdown(player_summary(player_row.squeeze()))
+else:
+    st.caption("Select a player above to see notes.")
+
 # ----------------- DOWNLOAD -----------------
 st.subheader("⬇️ Download ranked data")
 role_pick = st.selectbox("Role to export", list(ROLES.keys()))
@@ -415,6 +511,7 @@ export_view = df_f.sort_values(f"{role_pick} Score", ascending=False)
 export_cols = ["Player","Team","League","Age","Contract expires","Market value","League Strength", f"{role_pick} Score"]
 csv = export_view[export_cols].to_csv(index=False).encode("utf-8")
 st.download_button("Download CSV", data=csv, file_name=f"scouting_{role_pick.replace(' ','_').lower()}.csv", mime="text/csv")
+
 
 
 
