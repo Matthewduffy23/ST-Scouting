@@ -8,12 +8,84 @@ import numpy as np
 import math
 from pathlib import Path
 
+# --- NO IMAGE/CREST VERSION ---
+
 import matplotlib.pyplot as plt
+import numpy as np
 from matplotlib.colors import LinearSegmentedColormap
-try:
-    from PIL import Image
-except Exception:
-    Image = None  # crest optional
+
+def render_percentile_polar_chart(
+    title:str,
+    subtitle:str,
+    metrics:list,
+    percentiles:list,
+    *,
+    figsize=(8, 6.5),
+    bg="#e6e6e6",
+    ring_color="#000000"
+):
+    # Color scale
+    color_scale = ["#be2a3e", "#e25f48", "#f88f4d", "#f4d166", "#90b960", "#4b9b5f", "#22763f"]
+    cmap = LinearSegmentedColormap.from_list("custom_scale", color_scale)
+    vals_norm = [p/100 for p in percentiles]
+    bar_colors = [cmap(v) for v in vals_norm]
+
+    # Angles
+    N = len(metrics)
+    angles = np.linspace(0, 2*np.pi, N, endpoint=False)[::-1]  # clockwise
+    rotation_shift = np.deg2rad(75) - angles[0]                # start ~1 o'clock
+    rotated_angles = (angles + rotation_shift) % (2*np.pi)
+    bar_width = 2*np.pi / N
+
+    # Figure
+    fig = plt.figure(figsize=figsize)
+    fig.patch.set_facecolor(bg)
+    ax = fig.add_axes([0.05, 0.05, 0.9, 0.70], polar=True)
+    ax.set_facecolor(bg)
+    ax.set_rlim(0, 100)
+
+    # Bars + labels
+    for i in range(N):
+        ax.bar(rotated_angles[i], percentiles[i],
+               width=bar_width, color=bar_colors[i],
+               edgecolor='black', linewidth=1)
+
+        label_pos = percentiles[i] - 10 if percentiles[i] >= 15 else percentiles[i]*0.7
+        ax.text(rotated_angles[i], label_pos, f"{percentiles[i]}",
+                ha='center', va='center', fontsize=9, weight='bold', color='white')
+
+    # Outer ring
+    outer_circle = plt.Circle((0, 0), 100, transform=ax.transData._b,
+                              color=ring_color, fill=False, linewidth=2.4)
+    ax.add_artist(outer_circle)
+
+    # Dividers (heavier on cross axes)
+    for i in range(N):
+        sep_angle = (rotated_angles[i] - bar_width/2) % (2*np.pi)
+        is_cross = any(np.isclose(sep_angle, a, atol=0.01)
+                       for a in [0, np.pi/2, np.pi, 3*np.pi/2])
+        ax.plot([sep_angle, sep_angle], [0, 100],
+                color=ring_color if is_cross else '#b0b0b0',
+                linewidth=1.8 if is_cross else 1)
+
+    # Metric labels
+    label_radius = 125
+    for i, label in enumerate(metrics):
+        ax.text(rotated_angles[i], label_radius, label,
+                ha='center', va='center', fontsize=8, weight='bold', color='black')
+
+    # Cleanup
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.spines['polar'].set_visible(False)
+    ax.grid(False)
+
+    # Titles
+    fig.text(0.05, 0.93, title, fontsize=16, weight='bold', ha='left')
+    fig.text(0.05, 0.902, subtitle, fontsize=9, ha='left', color='gray')
+
+    return fig
+
 
 # ─────────────────────────── App setup ───────────────────────────
 st.set_page_config(page_title="Advanced Scouting Tool", layout="wide")
