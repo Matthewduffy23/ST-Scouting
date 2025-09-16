@@ -69,7 +69,8 @@ def clean_attacker_label(s: str) -> str:
     s = s.replace("Passes per 90", "Passes")
     s = s.replace("Touches in box per 90", "Touches in box")
     s = s.replace("Aerial duels per 90", "Aerial duels")
-    s = s.replace("Passes to penalty area per 90", "Passes to penalty area")
+    s = s.replace("Progressive runs per 90", "Progressive runs")
+    s = s.replace("Passes to penalty area per 90", "Passes to Pen area")
     s = s.replace("Accurate passes, %", "Pass %")
     return s
 
@@ -378,7 +379,7 @@ def plot_attacker_polar_chart(player: pd.DataFrame):
     team = str(player["Team"].iloc[0]) if "Team" in player.columns else ""
     league = str(player["League"].iloc[0]) if "League" in player.columns else ""
     fig.text(0.06, 0.94, f"{player_name} — Attacking Profile", fontsize=16, weight='bold', ha='left', color='#111827')
-    fig.text(0.06, 0.915, f"Percentile vs peers in league: {league} | Team: {team}", fontsize=9, ha='left', color='#6b7280')
+    fig.text(0.06, 0.915, f"Percentile Rank vs Position in league: {league} | Team: {team}", fontsize=9, ha='left', color='#6b7280')
 
     return fig
 
