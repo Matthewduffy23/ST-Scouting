@@ -1,7 +1,8 @@
-# advanced_scouting_app.py — Advanced Scouting Tool (with role descriptions + single-player percentile chart)
-# Filters: age, minutes, league quality, contract, market value, minimum performance thresholds
-# League-weighted role scoring (toggle + adjustable beta)
-# Four output tables in tabs + single-player role profile (Attacking / Defensive / Possession bar chart)
+# app.py — Advanced Scouting Tool with attacker polar percentile chart
+# - Filters: minutes, age, contract, league strength, market value, min performance
+# - Role scoring with optional league weighting
+# - 4 result tabs per role
+# - Single-player profile + Elche-style polar percentile chart for attackers
 
 import streamlit as st
 import pandas as pd
@@ -10,6 +11,7 @@ from pathlib import Path
 import io
 import math
 import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
 
 st.set_page_config(page_title="Advanced Scouting Tool", layout="wide")
 st.title("🔎 Advanced Scouting Tool")
@@ -38,6 +40,7 @@ INCLUDED_LEAGUES = [
     'Uruguay 1.', 'Uzbekistan 1.', 'Venezuela 1.', 'Wales 1.'
 ]
 
+# Feature columns present in your dataset
 FEATURES = [
     'Defensive duels per 90', 'Defensive duels won, %',
     'Aerial duels per 90', 'Aerial duels won, %',
@@ -51,26 +54,24 @@ FEATURES = [
     'Deep completions per 90', 'Smart passes per 90',
 ]
 
-# Categories for the single-player bar chart (use any metrics present in your data)
-METRIC_GROUPS = {
-    "Attacking": [
-        'Crosses per 90', 'Accurate crosses, %',
-        'Non-penalty goals per 90', 'xG per 90', 'Goal conversion, %',
-        'Head goals per 90', 'Key passes per 90', 'Shots per 90',
-        'Shots on target, %', 'Touches in box per 90',
-    ],
-    "Defensive": [
-        'Aerial duels per 90', 'Aerial duels won, %',
-        'Defensive duels per 90', 'Defensive duels won, %',
-        'PAdj Interceptions'
-    ],
-    "Possession": [
-        'Accelerations per 90', 'Dribbles per 90', 'Successful dribbles, %',
-        'Key passes per 90', 'Passes per 90', 'Accurate passes, %',
-        'Passes to penalty area per 90', 'Accurate passes to penalty area, %',
-        'Smart passes per 90', 'Progressive runs per 90'
-    ],
-}
+# --- Attacker polar chart metrics + label cleaner ---
+POLAR_METRICS = [
+    "Non-penalty goals per 90","xG per 90","Shots per 90",
+    "Dribbles per 90","Passes to penalty area per 90","Touches in box per 90",
+    "Aerial duels per 90","Aerial duels won, %","Passes per 90",
+    "Accurate passes, %","xA per 90","Progressive runs per 90",
+]
+
+def clean_attacker_label(s: str) -> str:
+    s = s.replace("Non-penalty goals per 90", "Non-Pen Goals")
+    s = s.replace("xG per 90", "xG").replace("xA per 90", "xA")
+    s = s.replace("Shots per 90", "Shots")
+    s = s.replace("Passes per 90", "Passes")
+    s = s.replace("Touches in box per 90", "Touches in box")
+    s = s.replace("Aerial duels per 90", "Aerial duels")
+    s = s.replace("Passes to penalty area per 90", "Passes to penalty area")
+    s = s.replace("Accurate passes, %", "Pass %")
+    return s
 
 ROLES = {
     'Target Man CF': {
@@ -315,54 +316,70 @@ for role, role_def in ROLES.items():
 
     st.divider()
 
-# ----------------- SINGLE PLAYER ROLE PROFILE + LEAGUE PERCENTILE CHART -----------------
+# ----------------- SINGLE PLAYER ROLE PROFILE + POLAR CHART -----------------
 st.subheader("🎯 Single Player Role Profile")
 player_name = st.selectbox("Choose player", sorted(df_f["Player"].unique()))
 player_row = df_f[df_f["Player"] == player_name].head(1)
 
-def _bar_color(v):
-    # simple traffic-light color by percentile
-    if v >= 66:   return "#22c55e"  # green
-    if v >= 33:   return "#eab308"  # yellow
-    return "#f97316"                # orange
+def plot_attacker_polar_chart(player: pd.DataFrame):
+    # Collect available metrics + percentiles (0..100)
+    metrics = [m for m in POLAR_METRICS if f"{m} Percentile" in df_f.columns]
+    if not metrics:
+        return None
 
-def plot_player_percentiles(player: pd.DataFrame):
-    # Use precomputed league percentiles in df_f
-    # Build three panels (Attacking / Defensive / Possession)
-    fig = plt.figure(figsize=(12, 8), dpi=180)
-    gs = fig.add_gridspec(3, 1, height_ratios=[1.2, 0.9, 1.1], hspace=0.35)
+    vals = [float(player[f"{m} Percentile"].iloc[0]) for m in metrics]
+    labels = [clean_attacker_label(m) for m in metrics]
+    N = len(metrics)
 
-    groups = list(METRIC_GROUPS.keys())
-    for gi, group in enumerate(groups):
-        ax = fig.add_subplot(gs[gi, 0])
-        metrics = [m for m in METRIC_GROUPS[group] if f"{m} Percentile" in df_f.columns]
-        if not metrics:
-            ax.axis("off")
-            continue
+    # Colors: deep red → green gradient (your palette)
+    color_scale = ["#be2a3e", "#e25f48", "#f88f4d", "#f4d166", "#90b960", "#4b9b5f", "#22763f"]
+    cmap = LinearSegmentedColormap.from_list("custom_scale", color_scale)
+    bar_colors = [cmap(v/100.0) for v in vals]
 
-        vals = [float(player[f"{m} Percentile"].iloc[0]) for m in metrics]
-        y = np.arange(len(metrics))
+    # Angles: clockwise, start near 1 o'clock
+    angles = np.linspace(0, 2*np.pi, N, endpoint=False)[::-1]
+    rotation_shift = np.deg2rad(75) - angles[0]
+    ang = (angles + rotation_shift) % (2*np.pi)
+    width = 2*np.pi / N
 
-        # background grid bands every 10
-        ax.set_xlim(0, 100)
-        ax.set_ylim(-0.5, len(metrics)-0.5)
-        for x in range(0, 110, 10):
-            ax.axvline(x, color="#e5e7eb", lw=0.8, zorder=0)
+    # Figure
+    fig = plt.figure(figsize=(8.2, 6.6), dpi=180)
+    fig.patch.set_facecolor('#f3f4f6')       # light gray page
+    ax = fig.add_axes([0.06, 0.08, 0.88, 0.74], polar=True)
+    ax.set_facecolor('#f3f4f6')
+    ax.set_rlim(0, 100)
 
-        # 50th percentile dashed
-        ax.axvline(50, color="#111827", lw=1.2, ls="--", alpha=0.7, zorder=1)
+    # Bars + inside value labels
+    for i in range(N):
+        ax.bar(ang[i], vals[i], width=width, color=bar_colors[i], edgecolor='black', linewidth=1.0, zorder=3)
+        label_pos = max(12, vals[i] * 0.75)  # keep readable
+        ax.text(ang[i], label_pos, f"{int(round(vals[i]))}", ha='center', va='center',
+                fontsize=9, weight='bold', color='white', zorder=4)
 
-        # bars
-        colors = [_bar_color(v) for v in vals]
-        ax.barh(y, vals, height=0.55, color=colors, edgecolor="#111827", linewidth=0.4)
+    # Outer ring and quadrant dividers
+    outer = plt.Circle((0, 0), 100, transform=ax.transData._b, color='black', fill=False, linewidth=2.2, zorder=5)
+    ax.add_artist(outer)
+    for i in range(N):
+        sep_angle = (ang[i] - width/2) % (2*np.pi)
+        is_cross = any(np.isclose(sep_angle, a, atol=0.01) for a in [0, np.pi/2, np.pi, 3*np.pi/2])
+        ax.plot([sep_angle, sep_angle], [0, 100], color='black' if is_cross else '#b0b0b0',
+                linewidth=1.6 if is_cross else 1.0, zorder=2)
 
-        # labels
-        ax.set_yticks(y)
-        ax.set_yticklabels(metrics, fontsize=9)
-        ax.set_xlabel("Percentile Rank", fontsize=9)
-        ax.set_title(group, loc="left", fontsize=13, fontweight="bold")
+    # Metric labels outside ring
+    label_r = 120
+    for i, lab in enumerate(labels):
+        ax.text(ang[i], label_r, lab, ha='center', va='center', fontsize=8.5, weight='bold', color='#111827', zorder=6)
 
-    fig.tight_layout()
+    # Cleanup
+    ax.set_xticks([]); ax.set_yticks([])
+    ax.spines['polar'].set_visible(False); ax.grid(False)
+
+    # Header & subheader
+    team = str(player["Team"].iloc[0]) if "Team" in player.columns else ""
+    league = str(player["League"].iloc[0]) if "League" in player.columns else ""
+    fig.text(0.06, 0.94, f"{player_name} — Attacking Profile", fontsize=16, weight='bold', ha='left', color='#111827')
+    fig.text(0.06, 0.915, f"Percentile vs peers in league: {league} | Team: {team}", fontsize=9, ha='left', color='#6b7280')
+
     return fig
 
 if player_row.empty:
@@ -375,7 +392,7 @@ else:
         f"League Strength {meta['League Strength']:.1f} • Value €{meta['Market value']:,.0f}"
     )
 
-    # small table of role percentiles
+    # Role score table
     rows = []
     for role in ROLES.keys():
         col = f"{role} Score"
@@ -383,9 +400,12 @@ else:
         rows.append({"Role": role, "Percentile": int(round(score)) if pd.notna(score) else None})
     st.dataframe(pd.DataFrame(rows), use_container_width=True)
 
-    # percentile bar chart
-    fig = plot_player_percentiles(player_row)
-    st.pyplot(fig, use_container_width=True)
+    # Attacker polar chart
+    fig = plot_attacker_polar_chart(player_row)
+    if fig is not None:
+        st.pyplot(fig, use_container_width=True)
+    else:
+        st.info("Not enough attacker metrics available to draw the polar chart.")
 
 # ----------------- DOWNLOAD -----------------
 st.subheader("⬇️ Download ranked data")
@@ -394,6 +414,7 @@ export_view = df_f.sort_values(f"{role_pick} Score", ascending=False)
 export_cols = ["Player","Team","League","Age","Contract expires","Market value","League Strength", f"{role_pick} Score"]
 csv = export_view[export_cols].to_csv(index=False).encode("utf-8")
 st.download_button("Download CSV", data=csv, file_name=f"scouting_{role_pick.replace(' ','_').lower()}.csv", mime="text/csv")
+
 
 
 
