@@ -239,7 +239,7 @@ if df_f.empty:
     st.stop()
 
 # ----------------- PERCENTILES FOR TABLES (per league) -----------------
-for c in FEATURES:
+   for c in FEATURES:
  # --- Make single-player role scores identical to table scores ---
 ROLE_METRICS = sorted({m for r in ROLES.values() for m in r["metrics"]})
 
