@@ -554,8 +554,7 @@ EXTRA_METRICS = [
 
 STYLE_MAP = {
     'Defensive duels per 90': {'style':'High work rate','sw':'Defensive Duels'},
-    'Aerial duels per 90': {'style':'Target Man',},
-    'Aerial duels won, %': {'style':None,'sw':'Aerial Duels'},
+    'Aerial duels won, %': {'style':'Target Man','sw':'Aerial Duels'},
     'Non-penalty goals per 90': {'style':None,'sw':'Scoring Goals'},
     'xG per 90': {'style':'Gets into good goal scoring positions','sw':'Attacking Positioning'},
     'Shots per 90': {'style':'Takes many shots','sw':'Shot Volume'},
@@ -576,7 +575,7 @@ STYLE_MAP = {
 
 HI = 75
 LO = 25
-STYLE_T = 60
+STYLE_T = 65
 
 def chips(items, color):
     if not items: return "_None identified._"
