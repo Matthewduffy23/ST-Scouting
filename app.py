@@ -848,7 +848,7 @@ if not player_row.empty:
         out = df_candidates[['Player','Team','League','Age','Minutes played','Market value']].copy()
         out['League strength'] = out['League'].map(LEAGUE_STRENGTHS).fillna(0.0)
         tgt_ls = LEAGUE_STRENGTHS.get(target_league, 1.0)
-        league_ratio = (similarity_df['League strength'] / target_league_strength).clip(lower=0.5, upper=1.0)
+       league_ratio = (out['League strength'] / tgt_ls).clip(lower=0.5, upper=1.0)
         out['Similarity'] = similarities
         out['Adjusted Similarity'] = out['Similarity'] * (1 - league_weight_sim) + out['Similarity'] * league_ratio * league_weight_sim
         out = out.sort_values('Adjusted Similarity', ascending=False).reset_index(drop=True)
