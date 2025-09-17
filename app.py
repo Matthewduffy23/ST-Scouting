@@ -405,7 +405,7 @@ S_W_MAP = {
     'Aerial duels won, %': {'style': None, 'strength': 'Aerial Duels', 'weak': 'Aerial Duels'},
     'Non-penalty goals per 90': {'style': None, 'strength': 'Scoring Goals', 'weak': 'Scoring Goals'},
     'xG per 90': {'style': 'Shots are from good goal scoring positions', 'strength': 'Attacking Positioning', 'weak': 'Attacking Positioning'},
-    'Shots per 90': {'style': 'Gets a lot of shots off', 'strength': 'Shot Volume, 'weak': 'Shot Volume},
+    'Shots per 90': {'style': 'Gets a lot of shots off', 'strength': 'Shot Volume', 'weak': 'Shot Volume'},
     'Goal conversion, %': {'style': None, 'strength': 'Finishing', 'weak': 'Finishing'},
     'Crosses per 90': {'style': 'Moves wide to create chances', 'strength': None, 'weak': None},
     'Accurate crosses, %': {'style': None, 'strength': 'Crossing', 'weak': 'Crossing'},
