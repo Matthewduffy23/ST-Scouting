@@ -198,6 +198,7 @@ with st.sidebar:
         max_value = mv_max_m * 1_000_000
     else:
         min_value, max_value = st.slider("Range (€)", 0, mv_cap, (0, mv_cap), step=100_000)
+
     value_band_max = st.number_input("Value band (tab 4 max €)", min_value=0,
                                      value=min_value if min_value>0 else 5_000_000, step=250_000)
 
@@ -249,32 +250,24 @@ for feat in FEATURES:
 ROLE_METRICS = sorted({m for r in ROLES.values() for m in r["metrics"]})
 
 def player_role_scores_from_row(row: pd.Series, *, use_weight=False, beta=0.40) -> dict:
+    """
+    Compute role scores for ONE player using the SAME per-league percentile columns
+    that power the tables. Optional league weighting is identical to the table logic.
+    """
     out = {}
     ls = float(LEAGUE_STRENGTHS.get(str(row["League"]), 50.0))
     for role, rd in ROLES.items():
         weights = rd["metrics"]; total = sum(weights.values()) or 1.0
         acc = 0.0
         for m, w in weights.items():
-            col = f"{m} Percentile"
+            col = f"{m} Percentile"  # same columns used above
             v = float(row[col]) if col in row and pd.notna(row[col]) else 0.0
             acc += v * w
         score = acc / total
         if use_weight:
-            score = (1 - beta) * score + beta * ls
+            score = (1 - beta) * score + beta * ls  # identical weighting form
         out[role] = score
     return out
-
-   
-    df_f[c] = pd.to_numeric(df_f[c], errors="coerce")
-df_f = df_f.dropna(subset=FEATURES)
-for feat in FEATURES:
-    df_f[f"{feat} Percentile"] = df_f.groupby("League")[feat].transform(lambda x: x.rank(pct=True) * 100.0)
-role_scores = player_role_scores_from_row(
-    player_row.iloc[0],
-    use_weight=use_player_league_weight,
-    beta=beta_player
-)
-
 
 # ----------------- ROLE SCORING (tables) -----------------
 def compute_weighted_role_score(df_in: pd.DataFrame, metrics: dict, beta: float, league_weighting: bool) -> pd.Series:
@@ -291,12 +284,85 @@ def compute_weighted_role_score(df_in: pd.DataFrame, metrics: dict, beta: float,
     return player_score
 
 for role_name, role_def in ROLES.items():
-    df_f[f"{role_name} Score"] = compute_weighted_role_score(df_f, role_def["metrics"], beta=beta, league_weighting=use_league_weighting)
+    df_f[f"{role_name} Score"] = compute_weighted_role_score(
+        df_f, role_def["metrics"], beta=beta, league_weighting=use_league_weighting
+    )
 
 # ----------------- THRESHOLDS -----------------
 if enable_min_perf and sel_metrics:
     keep_mask = np.ones(len(df_f), dtype=bool)
     for m in sel_metrics:
+        pct_col = f"{m} Percentile"
+        if pct_col in df_f.columns:
+            keep_mask &= (df_f[pct_col] >= min_pct)
+    df_f = df_f[keep_mask]
+    if df_f.empty:
+        st.warning("No players meet the minimum performance thresholds. Loosen thresholds.")
+        st.stop()
+
+# ----------------- HELPERS -----------------
+def fmt_cols(df_in: pd.DataFrame, score_col: str) -> pd.DataFrame:
+    out = df_in.copy()
+    out[score_col] = out[score_col].round(round_to).astype(int if round_to == 0 else float)
+    cols = ["Player","Team","League","Age","Contract expires","League Strength", score_col]
+    return out[cols]
+
+def top_table(df_in: pd.DataFrame, role: str, head_n: int) -> pd.DataFrame:
+    col = f"{role} Score"
+    ranked = df_in.dropna(subset=[col]).sort_values(col, ascending=False)
+    ranked = fmt_cols(ranked, col).head(head_n).reset_index(drop=True)
+    ranked.index = np.arange(1, len(ranked)+1)
+    return ranked
+
+def filtered_view(df_in: pd.DataFrame, *, age_max=None, contract_year=None, value_max=None):
+    t = df_in.copy()
+    if age_max is not None:
+        t = t[t["Age"] <= age_max]
+    if contract_year is not None:
+        t = t[t["Contract expires"].dt.year <= contract_year]
+    if value_max is not None:
+        t = t[t["Market value"] <= value_max]
+    return t
+
+# ----------------- TABS (tables) -----------------
+tabs = st.tabs(["Overall Top", "U23 Top", "Expiring Contracts", "Value Band (≤ max €)"])
+for role, role_def in ROLES.items():
+    with tabs[0]:
+        st.subheader(f"{role} — Overall Top {int(top_n)}")
+        st.caption(role_def.get("desc", ""))
+        st.dataframe(top_table(df_f, role, int(top_n)), use_container_width=True)
+        st.divider()
+    with tabs[1]:
+        u23_cutoff = st.number_input(f"{role} — U23 cutoff", min_value=16, max_value=30, value=23, step=1, key=f"u23_{role}")
+        st.subheader(f"{role} — U{u23_cutoff} Top {int(top_n)}")
+        st.caption(role_def.get("desc", ""))
+        st.dataframe(top_table(filtered_view(df_f, age_max=u23_cutoff), role, int(top_n)), use_container_width=True)
+        st.divider()
+    with tabs[2]:
+        exp_year = st.number_input(f"{role} — Expiring by year", min_value=2024, max_value=2030, value=cutoff_year, step=1, key=f"exp_{role}")
+        st.subheader(f"{role} — Contracts expiring ≤ {exp_year}")
+        st.caption(role_def.get("desc", ""))
+        st.dataframe(top_table(filtered_view(df_f, contract_year=exp_year), role, int(top_n)), use_container_width=True)
+        st.divider()
+    with tabs[3]:
+        v_max = st.number_input(f"{role} — Max value (€)", min_value=0, value=value_band_max, step=100_000, key=f"val_{role}")
+        st.subheader(f"{role} — Value band ≤ €{v_max:,.0f}")
+        st.caption(role_def.get("desc", ""))
+        st.dataframe(top_table(filtered_view(df_f, value_max=v_max), role, int(top_n)), use_container_width=True)
+        st.divider()
+
+# ----------------- SINGLE PLAYER ROLE PROFILE -----------------
+st.subheader("🎯 Single Player Role Profile")
+player_name = st.selectbox("Choose player", sorted(df_f["Player"].unique()))
+player_row = df_f[df_f["Player"] == player_name].head(1)
+
+# (Use this call later in the block to show identical role scores to the tables:)
+# table_consistent_role_scores = player_role_scores_from_row(
+#     player_row.iloc[0],
+#     use_weight=use_league_weighting,  # or use_player_league_weight if you prefer a separate toggle
+#     beta=beta
+# )
+
         pct_col = f"{m} Percentile"
         if pct_col in df_f.columns:
             keep_mask &= (df_f[pct_col] >= min_pct)
