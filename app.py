@@ -1,6 +1,6 @@
 # app.py — Advanced Scouting Tool (presets, colored role table, attacker polar chart,
 # adjustable comparison pool, improved NPG90 vs xG90 scatter, league-weighted player role scores
-# toggle for single player, styled strengths/weaknesses + style markers from extra metrics)
+# toggle for single player, styled strengths/weaknesses + style derived from extra metrics)
 
 import streamlit as st
 import pandas as pd
@@ -51,7 +51,6 @@ PRESET_LEAGUES = {
     "EFL": {'England 2.','England 3.','England 4.'}
 }
 
-# Dataset features
 FEATURES = [
     'Defensive duels per 90', 'Defensive duels won, %',
     'Aerial duels per 90', 'Aerial duels won, %',
@@ -65,7 +64,6 @@ FEATURES = [
     'Deep completions per 90', 'Smart passes per 90',
 ]
 
-# Metrics shown in attacker polar chart
 POLAR_METRICS = [
     "Non-penalty goals per 90","xG per 90","Shots per 90",
     "Dribbles per 90","Passes to penalty area per 90","Touches in box per 90",
@@ -190,7 +188,7 @@ with st.sidebar:
 
     min_strength, max_strength = st.slider("League quality (strength)", 0, 101, (0, 101))
     use_league_weighting = st.checkbox("Use league weighting in role score", value=False)
-    beta = st.slider("League weighting beta", 0.0, 1.0, 0.7, 0.05)
+    beta = st.slider("League weighting beta", 0.0, 1.0, 0.4, 0.05)  # default 0.4
 
     df["Market value"] = pd.to_numeric(df["Market value"], errors="coerce")
     mv_col = "Market value"
@@ -543,10 +541,9 @@ if 'pool_df' in locals() and not player_row.empty and not pool_df.empty and (x_c
 else:
     st.info("Add at least one league to the comparison pool (and ensure required metrics exist).")
 
-# ----------------- NOTES (strengths/weaknesses + style markers from extra metrics) -----------------
+# ----------------- NOTES (Style + strengths/weaknesses from extra metrics) -----------------
 st.subheader("📝 Notes")
 
-# Extra metrics to drive strengths/weaknesses/style (beyond the polar chart)
 EXTRA_METRICS = [
     'Defensive duels per 90','Aerial duels per 90','Aerial duels won, %',
     'Non-penalty goals per 90','xG per 90','Shots per 90','Goal conversion, %',
@@ -555,7 +552,6 @@ EXTRA_METRICS = [
     'xA per 90','Passes to penalty area per 90','Deep completions per 90','Smart passes per 90'
 ]
 
-# Label mapping for styles and S/W names
 STYLE_MAP = {
     'Defensive duels per 90': {'style':'High work rate','sw':'Defensive Duels'},
     'Aerial duels per 90': {'style':'Outlet target','sw':'Aerial Duels (volume)'},
@@ -578,10 +574,9 @@ STYLE_MAP = {
     'Smart passes per 90': {'style':'Line-breaking passer','sw':'Smart Passes'},
 }
 
-# thresholds
-HI = 70   # strength
-LO = 30   # weakness
-STYLE_T = 60  # style marker
+HI = 70
+LO = 30
+STYLE_T = 60
 
 def chips(items, color):
     if not items: return "_None identified._"
@@ -592,65 +587,67 @@ def chips(items, color):
 if not player_row.empty:
     ply = player_row.iloc[0]
 
-    # Percentiles for EXTRA_METRICS: prefer pool-based; fallback to league-based columns
+    # Percentiles for EXTRA_METRICS: prefer pool-based; fallback to league-based percentiles
     pct_extra = {}
     if 'pool_df' in locals() and not pool_df.empty:
-        pct_extra.update(percentiles_for_player_in_pool(pool_df, ply, EXTRA_METRICS))
-    # fill missing with league-based percentiles already in df_f
+        for m in EXTRA_METRICS:
+            if m in df.columns:
+                pct_extra[m] = percentile_in_series(ply[m], pool_df[m])
     for m in EXTRA_METRICS:
-        if m not in pct_extra:
+        if m not in pct_extra or pd.isna(pct_extra[m]):
             col = f"{m} Percentile"
             if col in player_row.columns and pd.notna(player_row[col].iloc[0]):
                 pct_extra[m] = float(player_row[col].iloc[0])
 
-    strengths = []
-    weaknesses = []
-    styles = []
-
+    strengths, weaknesses, styles = [], [], []
     for m, v in pct_extra.items():
-        label = STYLE_MAP.get(m, {})
-        sw_name = label.get('sw', m)
-        style_tag = label.get('style', None)
+        lab = STYLE_MAP.get(m, {})
+        sw_name = lab.get('sw', m)
+        style_tag = lab.get('style', None)
 
-        if v >= HI:
-            strengths.append(f"{sw_name} {int(round(v))}th")
-        elif v <= LO:
-            weaknesses.append(f"{sw_name} {int(round(v))}th")
+        if v >= HI: strengths.append((sw_name, v))
+        elif v <= LO: weaknesses.append((sw_name, v))
+        if style_tag and v >= STYLE_T: styles.append((style_tag, v))
 
-        if style_tag and v >= STYLE_T:
-            styles.append(style_tag)
+    # Sort by percentile but show only labels (no 95th etc.)
+    strengths = [name for name,_ in sorted(strengths, key=lambda x: -x[1])]
+    weaknesses = [name for name,_ in sorted(weaknesses, key=lambda x: x[1])]
+    styles = [name for name,_ in sorted({(n,v) for n,v in styles}, key=lambda x: -x[1])]
 
     st.markdown(
         f"**Profile:** {player_name} — {ply['Team']} ({ply['League']}), "
         f"age {int(ply['Age'])}, minutes {int(ply['Minutes played'])}."
     )
 
-    # Best role line (pool-based if available)
+    # Best role from the FIRST THREE roles only
+    first_three = list(ROLES.keys())[:3]
     best_line = ""
     if 'role_scores' in locals() and role_scores:
-        best_role = max(role_scores.items(), key=lambda kv: kv[1])[0]
-        best_val = int(round(role_scores[best_role]))
-        best_line = f"**Best role:** {best_role} — {best_val}th percentile."
+        subset = {k: v for k, v in role_scores.items() if k in first_three}
+        if subset:
+            best_role = max(subset.items(), key=lambda kv: kv[1])[0]
+            best_line = f"**Best role:** {best_role}."
     else:
+        # fallback to table-based scores
         best_role, best_val = None, -1
-        for r in ROLES.keys():
+        for r in first_three:
             col = f"{r} Score"
             if col in player_row.columns and pd.notna(player_row[col].iloc[0]):
                 if player_row[col].iloc[0] > best_val:
                     best_val = float(player_row[col].iloc[0]); best_role = r
         if best_role is not None:
-            best_line = f"**Best role (league):** {best_role} — {int(round(best_val))}th percentile."
+            best_line = f"**Best role (league):** {best_role}."
     if best_line:
         st.markdown(best_line)
 
-    st.markdown("**Style markers:**")
-    st.markdown(chips(sorted(set(styles)), "#bfdbfe"), unsafe_allow_html=True)  # light blue
+    st.markdown("**Style:**")
+    st.markdown(chips(styles, "#bfdbfe"), unsafe_allow_html=True)  # light blue
 
     st.markdown("**Strengths:**")
-    st.markdown(chips(sorted(strengths, key=lambda s: -int(s.split()[-1][:-2])), "#a7f3d0"), unsafe_allow_html=True)  # light green
+    st.markdown(chips(strengths, "#a7f3d0"), unsafe_allow_html=True)  # light green
 
     st.markdown("**Weaknesses / growth areas:**")
-    st.markdown(chips(sorted(weaknesses, key=lambda s: int(s.split()[-1][:-2])), "#fecaca"), unsafe_allow_html=True)  # light red
+    st.markdown(chips(weaknesses, "#fecaca"), unsafe_allow_html=True)  # light red
 else:
     st.caption("Pick a player above to generate notes.")
 
@@ -661,4 +658,5 @@ export_view = df_f.sort_values(f"{role_pick} Score", ascending=False)
 export_cols = ["Player","Team","League","Age","Contract expires","Market value","League Strength", f"{role_pick} Score"]
 csv = export_view[export_cols].to_csv(index=False).encode("utf-8")
 st.download_button("Download CSV", data=csv, file_name=f"scouting_{role_pick.replace(' ','_').lower()}.csv", mime="text/csv")
+
 
