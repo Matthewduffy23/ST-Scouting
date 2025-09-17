@@ -554,7 +554,7 @@ EXTRA_METRICS = [
 
 STYLE_MAP = {
     'Defensive duels per 90': {'style':'High work rate','sw':'Defensive Duels'},
-    'Aerial duels per 90': {'style':'Target Man','sw':'Outlet'},
+    'Aerial duels per 90': {'style':'Target Man','sw':None},
     'Aerial duels won, %': {'style':None,'sw':'Aerial Duels'},
     'Non-penalty goals per 90': {'style':None,'sw':'Scoring Goals'},
     'xG per 90': {'style':'Gets into good goal scoring positions','sw':'Attacking Positioning'},
