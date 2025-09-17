@@ -554,17 +554,17 @@ EXTRA_METRICS = [
 
 STYLE_MAP = {
     'Defensive duels per 90': {'style':'High work rate','sw':'Defensive Duels'},
-    'Aerial duels per 90': {'style':'Outlet target','sw':'Aerial Duels (volume)'},
+    'Aerial duels per 90': {'style':'Target Man','sw':'Outlet'},
     'Aerial duels won, %': {'style':None,'sw':'Aerial Duels'},
     'Non-penalty goals per 90': {'style':None,'sw':'Scoring Goals'},
-    'xG per 90': {'style':'Attacking positioning','sw':'Attacking Positioning'},
-    'Shots per 90': {'style':'Shot volume','sw':'Shot Volume'},
+    'xG per 90': {'style':'Gets into good goal scoring positions','sw':'Attacking Positioning'},
+    'Shots per 90': {'style':'Takes many shots','sw':'Shot Volume'},
     'Goal conversion, %': {'style':None,'sw':'Finishing'},
-    'Crosses per 90': {'style':'Crossing outlet','sw':'Crossing Volume'},
+    'Crosses per 90': {'style':'Crosser','sw':'Crossing Volume'},
     'Accurate crosses, %': {'style':None,'sw':'Crossing Accuracy'},
     'Dribbles per 90': {'style':'1v1 dribbler','sw':'Dribble Volume'},
     'Successful dribbles, %': {'style':None,'sw':'Dribbling Efficiency'},
-    'Touches in box per 90': {'style':'Busy in the box','sw':'Penalty-box Presence'},
+    'Touches in box per 90': {'style':'Busy in the box','sw':'Penalty-box Coverage'},
     'Progressive runs per 90': {'style':'Ball carrier','sw':'Progressive Runs'},
     'Passes per 90': {'style':'Build-up involvement','sw':'Build-up Volume'},
     'Accurate passes, %': {'style':None,'sw':'Retention'},
@@ -574,8 +574,8 @@ STYLE_MAP = {
     'Smart passes per 90': {'style':'Line-breaking passer','sw':'Smart Passes'},
 }
 
-HI = 70
-LO = 30
+HI = 75
+LO = 25
 STYLE_T = 60
 
 def chips(items, color):
