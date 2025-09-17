@@ -500,7 +500,7 @@ else:
         styled = role_df.style.applymap(lambda x: score_to_color(float(x)) if pd.notna(x) else "background-color:#fff",
                                         subset=["Percentile"]) \
                                .format({"Percentile": lambda x: f"{int(round(x))}" if pd.notna(x) else "—"})
-               st.dataframe(styled, use_container_width=True)
+        st.dataframe(styled, use_container_width=True)
 
         # ---------- NOTES (Style + strengths/weaknesses from extra metrics) ----------
         def percentile_in_series(value, series: pd.Series) -> float:
