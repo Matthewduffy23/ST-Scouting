@@ -560,7 +560,7 @@ STYLE_MAP = {
     'xG per 90': {'style':'Gets into good goal scoring positions','sw':'Attacking Positioning'},
     'Shots per 90': {'style':'Takes many shots','sw':'Shot Volume'},
     'Goal conversion, %': {'style':None,'sw':'Finishing'},
-    'Crosses per 90': {'style':'Moves into wide area's to create','sw':'Crossing Volume'},
+    'Crosses per 90': {'style':'Moves into wide areas to create','sw':'Crossing Volume'},
     'Accurate crosses, %': {'style':None,'sw':'Crossing Accuracy'},
     'Dribbles per 90': {'style':'1v1 dribbler','sw':'Dribble Volume'},
     'Successful dribbles, %': {'style':None,'sw':'Dribbling Efficiency'},
