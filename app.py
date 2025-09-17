@@ -409,7 +409,7 @@ S_W_MAP = {
     'Goal conversion, %': {'style': None, 'strength': 'Finishing', 'weak': 'Finishing'},
     'Crosses per 90': {'style': 'Moves wide to create chances', 'strength': None, 'weak': None},
     'Accurate crosses, %': {'style': None, 'strength': 'Crossing', 'weak': 'Crossing'},
-    'Dribbles per 90': {'style': '1v1 Dribbler', 'strength': 'Dribbling, 'weak': 'Dribbling},
+    'Dribbles per 90': {'style': '1v1 Dribbler', 'strength': 'Dribbling', 'weak': 'Dribbling'},
     'Successful dribbles, %': {'style': None, 'strength': 'Retention in carries', 'weak': 'Retention in carries'},
     'Touches in box per 90': {'style': 'Busy in the penalty box', 'strength': 'Penalty box coverage', 'weak': 'Penalty box coverage'},
     'Progressive runs per 90': {'style': 'Ball Carrier', 'strength': 'Progressive Runs', 'weak': 'Progressive Runs'},
