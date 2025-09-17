@@ -479,12 +479,44 @@ else:
         ply = player_row.iloc[0]
         pct_map = percentiles_for_player_in_pool(pool_df, ply)
 
-        # Role scores based on pool percentiles (with optional league weighting for the player)
-        player_ls = float(LEAGUE_STRENGTHS.get(str(ply["League"]), 50.0))
-        role_scores = player_role_scores_from_pct(
-            pct_map, player_league_strength=player_ls,
-            use_weight=use_player_league_weight, beta=beta_player
+                # --- NEW: choose scoring basis (match tables vs pool-based) ---
+        role_scoring_mode = st.radio(
+            "Role score basis",
+            ["League-table (same as Top N tables)", "Pool-based (current section settings)"],
+            index=0, horizontal=True
         )
+
+        def table_style_role_scores_from_row(row):
+            """Match the table logic exactly: use per-league percentiles already in df_f,
+            and the same sidebar league weighting/beta."""
+            rs = {}
+            for role, rd in ROLES.items():
+                total_w = sum(rd["metrics"].values()) or 1.0
+                metric_score = 0.0
+                for m, w in rd["metrics"].items():
+                    pct_col = f"{m} Percentile"
+                    if pct_col in row.index and pd.notna(row[pct_col]):
+                        metric_score += float(row[pct_col]) * w
+                metric_score /= total_w
+                if use_league_weighting:
+                    league_scaled = float(row.get("League Strength", 50.0))  # 0..100
+                    metric_score = (1 - beta) * metric_score + beta * league_scaled
+                rs[role] = metric_score
+            return rs
+
+        if role_scoring_mode.startswith("League-table"):
+            # Use the SAME metrics, percentiles, and weighting as the Top N tables
+            role_scores = table_style_role_scores_from_row(player_row.iloc[0])
+        else:
+            # Original pool-based method (kept intact)
+            player_ls = float(LEAGUE_STRENGTHS.get(str(ply["League"]), 50.0))
+            role_scores = player_role_scores_from_pct(
+                pct_map,
+                player_league_strength=player_ls,
+                use_weight=use_player_league_weight,
+                beta=beta_player
+            )
+
 
         # Role table with gradient colors
         def score_to_color(v: float) -> str:
