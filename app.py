@@ -814,77 +814,11 @@ if not player_row.empty:
 else:
     st.caption("Pick a player to see similar players.")
 
-# ----------------- (C) CLUB FIT -----------------
+# ---------------------------- (C) CLUB FIT — drop-in block ----------------------------
 st.markdown("---")
 st.header("🏟️ Club Fit Finder")
 
-# --- Settings ---
-with st.expander("Club-fit settings", expanded=False):
-    leagues_available = sorted(set(INCLUDED_LEAGUES) | set(df.get('League', pd.Series([])).dropna().unique()))
-    target_leagues_cf = st.multiselect(
-        "Target leagues (choose target from here)",
-        leagues_available,
-        default=leagues_available,
-        key="cf_tgt_lgs"
-    )
-
-    # Candidate pool presets
-    if "candidate_leagues_cf" not in st.session_state:
-        st.session_state.candidate_leagues_cf = list(INCLUDED_LEAGUES)
-    preset_name_cf = st.selectbox("Candidate pool preset", list(PRESET_LEAGUES.keys()), index=0, key="cf_preset")
-    if st.button("Apply preset", key="cf_apply"):
-        st.session_state.candidate_leagues_cf = list(PRESET_LEAGUES[preset_name_cf])
-
-    extra_candidate_leagues = st.multiselect(
-        "Extra leagues to add",
-        leagues_available,
-        default=[],
-        key="cf_extra"
-    )
-    leagues_selected_cf = sorted(set(st.session_state.candidate_leagues_cf) | set(extra_candidate_leagues))
-    st.caption(f"Candidate pool leagues: **{len(leagues_selected_cf)}** selected.")
-
-    pos_scope_cf = st.text_input("Position startswith (club fit)", "CF", key="cf_pos")
-
-    # Target player (from target leagues only)
-    target_pool_cf = df[df["League"].isin(target_leagues_cf)]
-    target_pool_cf = target_pool_cf[target_pool_cf["Position"].astype(str).str.startswith(tuple([pos_scope_cf]))]
-    target_player_cf = st.selectbox(
-        "Target player",
-        sorted(target_pool_cf["Player"].dropna().unique()),
-        key="cf_player"
-    )
-
-    # Minutes slider (returning a proper tuple)
-    max_minutes_in_data = int(pd.to_numeric(df.get("Minutes played", pd.Series([0])), errors="coerce").fillna(0).max())
-    slider_max_minutes = max(1000, max_minutes_in_data)
-    min_minutes_cf, max_minutes_cf = st.slider(
-        "Minutes filter (candidates)",
-        0, int(slider_max_minutes),
-        (500, int(slider_max_minutes)),
-        key="cf_min"
-    )
-
-    # Age slider
-    age_series_cf = pd.to_numeric(df.get("Age", pd.Series([16, 45])), errors="coerce")
-    age_min_data_cf = int(np.nanmin(age_series_cf)) if age_series_cf.notna().any() else 14
-    age_max_data_cf = int(np.nanmax(age_series_cf)) if age_series_cf.notna().any() else 45
-    min_age_cf, max_age_cf = st.slider(
-        "Age filter (candidates)",
-        age_min_data_cf, age_max_data_cf,
-        (16, 33),
-        key="cf_age"
-    )
-
-    # League strength + weights
-    min_strength_cf, max_strength_cf = st.slider("League quality (strength)", 0, 101, (0, 101), key="cf_ls")
-    league_weight_cf = st.slider("League weight", 0.0, 1.0, 0.4, 0.05, key="cf_lw")
-    market_value_weight_cf = st.slider("Market value weight", 0.0, 1.0, 0.2, 0.05, key="cf_mw")
-
-    manual_override_cf = st.number_input("Target market value override (€)", min_value=0, value=0, step=100_000, key="cf_mv")
-    top_n_cf = st.number_input("Show top N teams", 5, 100, 20, 5, key="cf_top")
-
-# --- Compute Club Fit (only when a target is chosen) ---
+# ---- sanity: make sure the columns we need exist in df ----
 CF_FEATURES = [
     'Defensive duels per 90','Aerial duels per 90','Aerial duels won, %','PAdj Interceptions',
     'Non-penalty goals per 90','xG per 90','Shots per 90','Shots on target, %','Goal conversion, %',
@@ -894,98 +828,216 @@ CF_FEATURES = [
     'Passes to final third per 90','Passes to penalty area per 90','Accurate passes to penalty area, %',
     'Deep completions per 90'
 ]
+required_cols_cf = {'Player','Team','League','Age','Position','Minutes played','Market value', *CF_FEATURES}
+missing_cf = [c for c in required_cols_cf if c not in df.columns]
+if missing_cf:
+    st.error(f"Club Fit: dataset missing required columns: {missing_cf}")
+else:
+    # -------------------- Controls --------------------
+    with st.expander("Club-fit settings", expanded=False):
+        leagues_available_cf = sorted(set(included_leagues) | set(df.get('League', pd.Series([])).dropna().unique()))
 
-if target_player_cf and (target_player_cf in df["Player"].values):
-    # Candidate pool (by teams)
-    df_candidates_cf = df[df["League"].isin(leagues_selected_cf)].copy()
-    df_candidates_cf = df_candidates_cf[df_candidates_cf["Position"].astype(str).str.startswith(tuple([pos_scope_cf]))]
+        # Target leagues (only affects the list of players you can pick as target)
+        target_leagues_cf = st.multiselect(
+            "Target leagues (choose target from here)",
+            leagues_available_cf,
+            default=leagues_available_cf,
+            key="cf_target_leagues"
+        )
 
-    # Numerics + filters
-    df_candidates_cf["Minutes played"] = pd.to_numeric(df_candidates_cf["Minutes played"], errors="coerce")
-    df_candidates_cf["Age"] = pd.to_numeric(df_candidates_cf["Age"], errors="coerce")
-    df_candidates_cf["Market value"] = pd.to_numeric(df_candidates_cf["Market value"], errors="coerce")
-    df_candidates_cf = df_candidates_cf[
-        df_candidates_cf["Minutes played"].between(min_minutes_cf, max_minutes_cf, inclusive="both")
-    ]
-    df_candidates_cf = df_candidates_cf[
-        df_candidates_cf["Age"].between(min_age_cf, max_age_cf, inclusive="both")
-    ]
-    df_candidates_cf = df_candidates_cf.dropna(subset=CF_FEATURES)
+        # Candidate pool via preset + extras
+        if 'candidate_leagues_cf' not in st.session_state:
+            st.session_state.candidate_leagues_cf = list(included_leagues)
 
-    if df_candidates_cf.empty:
-        st.info("No candidate players after filters. Widen candidate leagues or relax filters.")
-    else:
-        # Target (from target-leagues subset)
-        df_target_pool_cf = df[df["League"].isin(target_leagues_cf)].copy()
-        df_target_pool_cf = df_target_pool_cf[df_target_pool_cf["Position"].astype(str).str.startswith(tuple([pos_scope_cf]))]
-        if target_player_cf not in df_target_pool_cf["Player"].values:
-            st.info("Target player not found in selected target leagues.")
+        preset_name_cf = st.selectbox("Candidate pool preset", list(PRESETS.keys()), index=0, key="cf_preset_name")
+        c1a, c1b = st.columns([1,2])
+        if c1a.button("Apply preset", key="cf_apply_preset"):
+            if PRESETS.get(preset_name_cf) is not None:
+                st.session_state.candidate_leagues_cf = list(PRESETS[preset_name_cf])
+
+        extra_candidate_leagues_cf = c1b.multiselect(
+            "Extra leagues to add",
+            leagues_available_cf,
+            default=[],
+            key="cf_extra_leagues"
+        )
+        leagues_selected_cf = sorted(set(st.session_state.candidate_leagues_cf) | set(extra_candidate_leagues_cf))
+        st.caption(f"Candidate pool leagues: **{len(leagues_selected_cf)}** selected.")
+
+        pos_scope_cf = st.text_input("Position startswith (club fit)", "CF", key="cf_pos_scope")
+
+        # Target player selector (from target leagues, not the candidate pool)
+        target_pool_cf = df[df['League'].isin(target_leagues_cf)]
+        target_pool_cf = target_pool_cf[target_pool_cf['Position'].astype(str).str.startswith(tuple([pos_scope_cf]))]
+        target_player_cf = st.selectbox(
+            "Target player",
+            sorted(target_pool_cf['Player'].dropna().unique()),
+            key="cf_target_player"
+        )
+
+        # Minutes and Age filters for the candidate pool (teams are built from these players)
+        max_minutes_in_data_cf = int(pd.to_numeric(df.get('Minutes played', pd.Series([0])), errors='coerce').fillna(0).max())
+        slider_max_minutes_cf = int(max(1000, max_minutes_in_data_cf))
+        min_minutes_cf, max_minutes_cf = st.slider(
+            "Minutes filter (candidates)",
+            0, slider_max_minutes_cf,
+            (500, slider_max_minutes_cf),
+            key="cf_minutes_slider"
+        )
+
+        age_series_cf = pd.to_numeric(df.get('Age', pd.Series([16, 45])), errors='coerce')
+        age_min_data_cf = int(np.nanmin(age_series_cf)) if age_series_cf.notna().any() else 14
+        age_max_data_cf = int(np.nanmax(age_series_cf)) if age_series_cf.notna().any() else 45
+        min_age_cf, max_age_cf = st.slider(
+            "Age filter (candidates)",
+            age_min_data_cf, age_max_data_cf,
+            (16, 33),
+            key="cf_age_slider"
+        )
+
+        min_strength_cf, max_strength_cf = st.slider("League quality (strength)", 0, 101, (0, 101), key="cf_strength")
+
+        # Weights
+        league_weight_cf = st.slider("League weight", 0.0, 1.0, DEFAULT_LEAGUE_WEIGHT, 0.05, key="cf_league_w")
+        market_value_weight_cf = st.slider("Market value weight", 0.0, 1.0, DEFAULT_MARKET_WEIGHT, 0.05, key="cf_market_w")
+        manual_override_cf = st.number_input("Target market value override (€)", min_value=0, value=0, step=100_000, key="cf_mv_override")
+
+        # Advanced feature weights (keep your existing defaults; unlisted => 1)
+        st.subheader("Advanced feature weights")
+        st.caption("Unlisted features default to weight = 1.")
+        weights_ui_cf = {}
+        for f in CF_FEATURES:
+            default_val = default_weight_factors.get(f, 1) if 'default_weight_factors' in globals() else 1
+            weights_ui_cf[f] = st.slider(f"• {f}", 0, 5, int(default_val), key=f"cf_w_{f}")
+
+        top_n_cf = st.number_input("Show top N teams", 5, 100, 20, 5, key="cf_topn")
+
+    # -------------------- Compute --------------------
+    if target_player_cf and (target_player_cf in df['Player'].values):
+        # Candidate player pool (used to build team profiles)
+        df_candidates_cf = df[df['League'].isin(leagues_selected_cf)].copy()
+        df_candidates_cf = df_candidates_cf[df_candidates_cf['Position'].astype(str).str.startswith(tuple([pos_scope_cf]))]
+
+        # Numerics + filters
+        df_candidates_cf['Minutes played'] = pd.to_numeric(df_candidates_cf['Minutes played'], errors='coerce')
+        df_candidates_cf['Age'] = pd.to_numeric(df_candidates_cf['Age'], errors='coerce')
+        df_candidates_cf['Market value'] = pd.to_numeric(df_candidates_cf['Market value'], errors='coerce')
+
+        df_candidates_cf = df_candidates_cf[
+            df_candidates_cf['Minutes played'].between(min_minutes_cf, max_minutes_cf, inclusive='both')
+        ]
+        df_candidates_cf = df_candidates_cf[
+            df_candidates_cf['Age'].between(min_age_cf, max_age_cf, inclusive='both')
+        ]
+        df_candidates_cf = df_candidates_cf.dropna(subset=CF_FEATURES)
+
+        if df_candidates_cf.empty:
+            st.info("No candidate players after filters. Widen candidate leagues or relax filters.")
         else:
-            df_target_pool_cf["Market value"] = pd.to_numeric(df_target_pool_cf["Market value"], errors="coerce")
-            target_row_cf = df_target_pool_cf.loc[df_target_pool_cf["Player"] == target_player_cf].iloc[0]
-            target_vector = target_row_cf[CF_FEATURES].values
-            tgt_ls = LEAGUE_STRENGTHS.get(target_row_cf["League"], 1.0)
-            target_market_value = (
-                float(manual_override_cf) if manual_override_cf and manual_override_cf > 0
-                else (float(target_row_cf["Market value"]) if pd.notna(target_row_cf["Market value"]) and target_row_cf["Market value"] > 0
-                      else 2_000_000.0)
-            )
+            # Target (from target_leagues)
+            df_target_pool_cf = df[df['League'].isin(target_leagues_cf)].copy()
+            df_target_pool_cf = df_target_pool_cf[df_target_pool_cf['Position'].astype(str).str.startswith(tuple([pos_scope_cf]))]
 
-            # Build club profiles (team means)
-            club_profiles = df_candidates_cf.groupby(["Team"])[CF_FEATURES].mean().reset_index()
-            team_league = df_candidates_cf.groupby("Team")["League"].agg(lambda x: x.mode().iloc[0] if not x.mode().empty else x.iloc[0])
-            team_market = df_candidates_cf.groupby("Team")["Market value"].mean()
-            club_profiles["League"] = club_profiles["Team"].map(team_league)
-            club_profiles["Avg Team Market Value"] = club_profiles["Team"].map(team_market)
-            club_profiles = club_profiles.dropna(subset=["Avg Team Market Value"])
+            if target_player_cf not in df_target_pool_cf['Player'].values:
+                st.info("Target player not found in selected target leagues.")
+            else:
+                df_target_pool_cf['Market value'] = pd.to_numeric(df_target_pool_cf['Market value'], errors='coerce')
+                target_row_cf = df_target_pool_cf.loc[df_target_pool_cf['Player'] == target_player_cf].iloc[0]
+                target_vector_cf = target_row_cf[CF_FEATURES].values
+                target_ls_cf = league_strengths.get(target_row_cf['League'], 1.0)
 
-            # Similarity -> base fit
-            scaler_cf = StandardScaler()
-            scaled_team = scaler_cf.fit_transform(club_profiles[CF_FEATURES])
-            target_scaled = scaler_cf.transform([target_vector])[0]
-            weights_vec_cf = np.ones(len(CF_FEATURES), dtype=float)
-            dist = np.linalg.norm((scaled_team - target_scaled) * weights_vec_cf, axis=1)
-            rng = dist.max() - dist.min()
-            base_fit = (1 - (dist - dist.min()) / (rng if rng > 0 else 1)) * 100
-            club_profiles["Club Fit %"] = base_fit.round(2)
+                # Target MV (override if provided)
+                target_market_value_cf = (
+                    float(manual_override_cf) if manual_override_cf and manual_override_cf > 0
+                    else (float(target_row_cf['Market value']) if pd.notna(target_row_cf['Market value']) and target_row_cf['Market value'] > 0
+                          else 2_000_000.0)
+                )
 
-            # League adjustment
-            club_profiles["League strength"] = club_profiles["League"].map(LEAGUE_STRENGTHS).fillna(0.0)
-            club_profiles = club_profiles[
-                (club_profiles["League strength"] >= float(min_strength_cf)) &
-                (club_profiles["League strength"] <= float(max_strength_cf))
-            ]
-            ratio = (club_profiles["League strength"] / tgt_ls).clip(0.5, 1.2)
-            club_profiles["Adjusted Fit %"] = (
-                club_profiles["Club Fit %"] * (1 - league_weight_cf) +
-                club_profiles["Club Fit %"] * ratio * league_weight_cf
-            )
-            # mild penalty if league >> target
-            league_gap = (club_profiles["League strength"] - tgt_ls).clip(lower=0)
-            penalty = (1 - (league_gap / 100)).clip(lower=0.7)
-            club_profiles["Adjusted Fit %"] = club_profiles["Adjusted Fit %"] * penalty
+                # Team profiles (mean of players that survived candidate filters)
+                club_profiles_cf = df_candidates_cf.groupby('Team')[CF_FEATURES].mean().reset_index()
 
-            # Market value fit
-            value_fit_ratio = (club_profiles["Avg Team Market Value"] / target_market_value).clip(0.5, 1.5)
-            value_fit_score = (1 - abs(1 - value_fit_ratio)) * 100
-            club_profiles["Final Fit %"] = (
-                club_profiles["Adjusted Fit %"] * (1 - market_value_weight_cf) +
-                value_fit_score * market_value_weight_cf
-            )
+                # Team league & average team MV from same pool
+                team_league_cf = df_candidates_cf.groupby('Team')['League'].agg(lambda x: x.mode().iloc[0] if not x.mode().empty else x.iloc[0])
+                team_market_cf = df_candidates_cf.groupby('Team')['Market value'].mean()
+                club_profiles_cf['League'] = club_profiles_cf['Team'].map(team_league_cf)
+                club_profiles_cf['Avg Team Market Value'] = club_profiles_cf['Team'].map(team_market_cf)
+                club_profiles_cf = club_profiles_cf.dropna(subset=['Avg Team Market Value'])
 
-            results = club_profiles[[
-                "Team","League","League strength","Avg Team Market Value",
-                "Club Fit %","Adjusted Fit %","Final Fit %"
-            ]].copy()
-            results = results.sort_values("Final Fit %", ascending=False).reset_index(drop=True)
-            results.insert(0, "Rank", np.arange(1, len(results) + 1))
+                # Standardize & weighted distance
+                scaler_cf = StandardScaler()
+                X_team = scaler_cf.fit_transform(club_profiles_cf[CF_FEATURES])
+                x_tgt = scaler_cf.transform([target_vector_cf])[0]
+                weights_vec_cf = np.array([weights_ui_cf.get(f, 1) for f in CF_FEATURES], dtype=float)
 
-            st.caption(
-                f"Target: {target_player_cf} — {target_row_cf.get('Team','Unknown')} ({target_row_cf['League']}) • "
-                f"Target MV used: €{target_market_value:,.0f} • Target LS {tgt_ls:.2f} • "
-                f"Candidates: {len(leagues_selected_cf)} leagues (preset: {preset_name_cf})"
-            )
-            st.dataframe(results.head(int(top_n_cf)), use_container_width=True)
+                dist_cf = np.linalg.norm((X_team - x_tgt) * weights_vec_cf, axis=1)  # lower = more similar
+                rng = dist_cf.max() - dist_cf.min()
+                club_fit_base = (1 - (dist_cf - dist_cf.min()) / (rng if rng > 0 else 1)) * 100.0
+                club_profiles_cf['Club Fit %'] = club_fit_base.round(2)
+
+                # League strength adjustment
+                club_profiles_cf['League strength'] = club_profiles_cf['League'].map(league_strengths).fillna(0.0)
+                club_profiles_cf = club_profiles_cf[
+                    (club_profiles_cf['League strength'] >= float(min_strength_cf)) &
+                    (club_profiles_cf['League strength'] <= float(max_strength_cf))
+                ]
+
+                # Difficulty ratio vs target league
+                ratio_cf = (club_profiles_cf['League strength'] / target_ls_cf).clip(0.5, 1.2)
+                club_profiles_cf['Adjusted Fit %'] = (
+                    club_profiles_cf['Club Fit %'] * (1 - league_weight_cf) +
+                    club_profiles_cf['Club Fit %'] * ratio_cf * league_weight_cf
+                )
+
+                # mild penalty if destination league >> target
+                league_gap_cf = (club_profiles_cf['League strength'] - target_ls_cf).clip(lower=0)
+                penalty_cf = (1 - (league_gap_cf / 100)).clip(lower=0.7)
+                club_profiles_cf['Adjusted Fit %'] = club_profiles_cf['Adjusted Fit %'] * penalty_cf
+
+                # Market value fit (closer team MV to target MV gets rewarded)
+                value_fit_ratio_cf = (club_profiles_cf['Avg Team Market Value'] / target_market_value_cf).clip(0.5, 1.5)
+                value_fit_score_cf = (1 - abs(1 - value_fit_ratio_cf)) * 100.0
+
+                club_profiles_cf['Final Fit %'] = (
+                    club_profiles_cf['Adjusted Fit %'] * (1 - market_value_weight_cf) +
+                    value_fit_score_cf * market_value_weight_cf
+                )
+
+                # -------------- Results --------------
+                results_cf = club_profiles_cf[[
+                    'Team','League','League strength','Avg Team Market Value',
+                    'Club Fit %','Adjusted Fit %','Final Fit %'
+                ]].copy()
+
+                results_cf = results_cf.sort_values('Final Fit %', ascending=False).reset_index(drop=True)
+                results_cf.insert(0, 'Rank', np.arange(1, len(results_cf) + 1))
+
+                st.caption(
+                    f"Target: {target_player_cf} — {target_row_cf.get('Team','Unknown')} ({target_row_cf['League']}) • "
+                    f"Target MV used: €{target_market_value_cf:,.0f} • Target LS {target_ls_cf:.2f} • "
+                    f"Candidates: {len(leagues_selected_cf)} leagues (preset: {preset_name_cf})"
+                )
+                st.dataframe(results_cf.head(int(top_n_cf)), use_container_width=True)
+
+                # Export
+                csv_cf = results_cf.to_csv(index=False).encode('utf-8')
+                st.download_button("⬇️ Download all results (CSV)", data=csv_cf,
+                                   file_name="club_fit_results.csv", mime="text/csv")
+
+                # Debug panel
+                with st.expander("Debug / Repro details"):
+                    st.write({
+                        "preset": preset_name_cf,
+                        "candidate_leagues_count": len(leagues_selected_cf),
+                        "target_leagues_count": len(target_leagues_cf),
+                        "league_weight": float(league_weight_cf),
+                        "market_value_weight": float(market_value_weight_cf),
+                        "target_market_value_used": float(target_market_value_cf),
+                        "minutes_range": (int(min_minutes_cf), int(max_minutes_cf)),
+                        "age_range": (int(min_age_cf), int(max_age_cf)),
+                        "strength_range": (int(min_strength_cf), int(max_strength_cf)),
+                        "n_teams": int(results_cf.shape[0]),
+                    })
+# -------------------------- end Club Fit block --------------------------
 
 
 # ----------------- DOWNLOAD (ranked data) -----------------
