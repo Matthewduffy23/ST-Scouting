@@ -569,9 +569,9 @@ STYLE_MAP = {
     'Passes per 90': {'style':'Build-up involvement','sw':'Build-up Volume'},
     'Accurate passes, %': {'style':None,'sw':'Retention'},
     'xA per 90': {'style':'Chance creator','sw':'Chance Creation'},
-    'Passes to penalty area per 90': {'style':'Facilitator','sw':'Passes to Penalty Area'},
-    'Deep completions per 90': {'style':'Value-adding passer','sw':'Deep Completions'},
-    'Smart passes per 90': {'style':'Line-breaking passer','sw':'Smart Passes'},
+    'Passes to penalty area per 90': {'style':None,'sw':'Passes to Penalty Area'},
+    'Deep completions per 90': {'style':None,'sw':'Deep Completions'},
+    'Smart passes per 90': {'style':None,'sw':'Smart Passes'},
 }
 
 HI = 75
