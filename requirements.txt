@@ -1,7 +1,9 @@
-streamlit>=1.37
-pandas>=2.2
-numpy>=1.26
-matplotlib>=3.8
+streamlit
+pandas
+numpy
+matplotlib
+scikit-learn
+
 
 
 
