@@ -34,8 +34,8 @@ except Exception:
             self.fit(X); return self.transform(X)
 
 # ----------------- PAGE -----------------
-st.set_page_config(page_title="Advanced Scouting Suite", layout="wide")
-st.title("🔎 Advanced Scouting Suite")
+st.set_page_config(page_title="Advanced Scouting Platform", layout="wide")
+st.title("🔎 Advanced CF Scouting Platform")
 
 # ----------------- CONFIG -----------------
 INCLUDED_LEAGUES = [
@@ -171,7 +171,7 @@ with st.sidebar:
     min_minutes, max_minutes = st.slider("Minutes played", 0, 5000, (500, 5000))
     age_min_data = int(np.nanmin(df["Age"])) if df["Age"].notna().any() else 14
     age_max_data = int(np.nanmax(df["Age"])) if df["Age"].notna().any() else 45
-    min_age, max_age = st.slider("Age", age_min_data, age_max_data, (16, 33))
+    min_age, max_age = st.slider("Age", age_min_data, age_max_data, (16, 40))
 
     pos_text = st.text_input("Position startswith", "CF")
 
@@ -299,7 +299,7 @@ def filtered_view(df_in: pd.DataFrame, *, age_max=None, contract_year=None, valu
     return t
 
 # ----------------- TABS (tables) -----------------
-tabs = st.tabs(["Overall Top N", "U23 Top N", "Expiring Contracts", "Value Band (≤ max €)"])
+tabs = st.tabs(["Overall Top", "U23 Top", "Expiring Contracts", "Value Band (≤ max €)"])
 for role, role_def in ROLES.items():
     with tabs[0]:
         st.subheader(f"{role} — Overall Top {int(top_n)}")
@@ -404,14 +404,14 @@ S_W_MAP = {
     'Aerial duels per 90': {'style': 'Target Man', 'strength': 'Aerial Presence', 'weak': 'Aerial Presence'},
     'Aerial duels won, %': {'style': None, 'strength': 'Aerial Duels', 'weak': 'Aerial Duels'},
     'Non-penalty goals per 90': {'style': None, 'strength': 'Scoring Goals', 'weak': 'Scoring Goals'},
-    'xG per 90': {'style': 'Good shot locations', 'strength': 'Attacking Positioning', 'weak': 'Attacking Positioning'},
-    'Shots per 90': {'style': 'High shot volume', 'strength': None, 'weak': None},
+    'xG per 90': {'style': 'Shots are from good goal scoring positions', 'strength': 'Attacking Positioning', 'weak': 'Attacking Positioning'},
+    'Shots per 90': {'style': 'Gets a lot of shots off', 'strength': 'Shot Volume, 'weak': 'Shot Volume'},
     'Goal conversion, %': {'style': None, 'strength': 'Finishing', 'weak': 'Finishing'},
-    'Crosses per 90': {'style': 'Crossing Volume', 'strength': None, 'weak': None},
+    'Crosses per 90': {'style': 'Moves wide to create chances', 'strength': None, 'weak': None},
     'Accurate crosses, %': {'style': None, 'strength': 'Crossing', 'weak': 'Crossing'},
-    'Dribbles per 90': {'style': '1v1 Dribbler', 'strength': None, 'weak': None},
-    'Successful dribbles, %': {'style': None, 'strength': 'Dribbling', 'weak': 'Dribbling'},
-    'Touches in box per 90': {'style': 'Busy in box', 'strength': None, 'weak': None},
+    'Dribbles per 90': {'style': '1v1 Dribbler', 'strength': 'Dribbling, 'weak': 'Dribbling},
+    'Successful dribbles, %': {'style': None, 'strength': 'Retention in carries', 'weak': 'Retention in carries'},
+    'Touches in box per 90': {'style': 'Busy in the penalty box', 'strength': 'Penalty box coverage', 'weak': 'Penalty box coverage'},
     'Progressive runs per 90': {'style': 'Ball Carrier', 'strength': 'Progressive Runs', 'weak': 'Progressive Runs'},
     'Passes per 90': {'style': 'Active in build-up', 'strength': None, 'weak': None},
     'Accurate passes, %': {'style': None, 'strength': 'Retention', 'weak': 'Retention'},
@@ -647,7 +647,7 @@ else:
 
 # ----------------- (A) COMPARISON RADAR (SB-STYLE) -----------------
 st.markdown("---")
-st.header("📊 Player Comparison — SB Radar")
+st.header("📊 Player Comparison")
 with st.expander("Radar settings", expanded=False):
     # default pos prefix from selected player
     pos_scope = st.text_input("Position startswith (radar pool)", default_pos_prefix, key="rad_pos")
