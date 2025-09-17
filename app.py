@@ -18,10 +18,8 @@ from matplotlib.patches import Circle, Wedge
 try:
     from sklearn.preprocessing import StandardScaler
 except Exception:
-
     class StandardScaler:  # minimal drop-in
-        def __init__(self):
-            self.mean_ = None; self.scale_ = None
+        def __init__(self): self.mean_ = None; self.scale_ = None
         def fit(self, X):
             X = np.asarray(X, dtype=float)
             self.mean_ = X.mean(axis=0)
@@ -36,26 +34,35 @@ except Exception:
             self.fit(X); return self.transform(X)
 
 # ----------------- PAGE -----------------
-st.set_page_config(page_title="Advanced Scouting Suite", layout="wide")
-st.title("🔎 Advanced Scouting Suite")
+st.set_page_config(page_title="Advanced Scouting Platform", layout="wide")
+st.title("🔎 Advanced CF Scouting Platform")
 
 # ----------------- CONFIG -----------------
 INCLUDED_LEAGUES = [
-    'England 1.','England 2.','England 3.','England 4.','England 5.','England 6.','England 7.','England 8.','England 9.','England 10.',
-    'Albania 1.','Algeria 1.','Andorra 1.','Argentina 1.','Armenia 1.','Australia 1.','Austria 1.','Austria 2.','Azerbaijan 1.','Belgium 1.',
-    'Belgium 2.','Bolivia 1.','Bosnia 1.','Brazil 1.','Brazil 2.','Brazil 3.','Bulgaria 1.','Canada 1.','Chile 1.','Colombia 1.',
-    'Costa Rica 1.','Croatia 1.','Cyprus 1.','Czech 1.','Czech 2.','Denmark 1.','Denmark 2.','Ecuador 1.','Egypt 1.','Estonia 1.',
-    'Finland 1.','France 1.','France 2.','France 3.','Georgia 1.','Germany 1.','Germany 2.','Germany 3.','Germany 4.','Greece 1.',
-    'Hungary 1.','Iceland 1.','Israel 1.','Israel 2.','Italy 1.','Italy 2.','Italy 3.','Japan 1.','Japan 2.','Kazakhstan 1.',
-    'Korea 1.','Latvia 1.','Lithuania 1.','Malta 1.','Mexico 1.','Moldova 1.','Morocco 1.','Netherlands 1.','Netherlands 2.','North Macedonia 1.',
-    'Northern Ireland 1.','Norway 1.','Norway 2.','Paraguay 1.','Peru 1.','Poland 1.','Poland 2.','Portugal 1.','Portugal 2.','Portugal 3.',
-    'Qatar 1.','Ireland 1.','Romania 1.','Russia 1.','Saudi 1.','Scotland 1.','Scotland 2.','Scotland 3.','Serbia 1.','Serbia 2.',
-    'Slovakia 1.','Slovakia 2.','Slovenia 1.','Slovenia 2.','South Africa 1.','Spain 1.','Spain 2.','Spain 3.','Sweden 1.','Sweden 2.',
-    'Switzerland 1.','Switzerland 2.','Tunisia 1.','Turkey 1.','Turkey 2.','Ukraine 1.','UAE 1.','USA 1.','USA 2.','Uruguay 1.',
-    'Uzbekistan 1.','Venezuela 1.','Wales 1.'
+    'England 1.', 'England 2.', 'England 3.', 'England 4.', 'England 5.',
+    'England 6.', 'England 7.', 'England 8.', 'England 9.', 'England 10.',
+    'Albania 1.', 'Algeria 1.', 'Andorra 1.', 'Argentina 1.', 'Armenia 1.',
+    'Australia 1.', 'Austria 1.', 'Austria 2.', 'Azerbaijan 1.', 'Belgium 1.',
+    'Belgium 2.', 'Bolivia 1.', 'Bosnia 1.', 'Brazil 1.', 'Brazil 2.', 'Brazil 3.',
+    'Bulgaria 1.', 'Canada 1.', 'Chile 1.', 'Colombia 1.', 'Costa Rica 1.',
+    'Croatia 1.', 'Cyprus 1.', 'Czech 1.', 'Czech 2.', 'Denmark 1.', 'Denmark 2.',
+    'Ecuador 1.', 'Egypt 1.', 'Estonia 1.', 'Finland 1.', 'France 1.', 'France 2.',
+    'France 3.', 'Georgia 1.', 'Germany 1.', 'Germany 2.', 'Germany 3.', 'Germany 4.',
+    'Greece 1.', 'Hungary 1.', 'Iceland 1.', 'Israel 1.', 'Israel 2.', 'Italy 1.',
+    'Italy 2.', 'Italy 3.', 'Japan 1.', 'Japan 2.', 'Kazakhstan 1.', 'Korea 1.',
+    'Latvia 1.', 'Lithuania 1.', 'Malta 1.', 'Mexico 1.', 'Moldova 1.', 'Morocco 1.',
+    'Netherlands 1.', 'Netherlands 2.', 'North Macedonia 1.', 'Northern Ireland 1.',
+    'Norway 1.', 'Norway 2.', 'Paraguay 1.', 'Peru 1.', 'Poland 1.', 'Poland 2.',
+    'Portugal 1.', 'Portugal 2.', 'Portugal 3.', 'Qatar 1.', 'Ireland 1.', 'Romania 1.',
+    'Russia 1.', 'Saudi 1.', 'Scotland 1.', 'Scotland 2.', 'Scotland 3.', 'Serbia 1.',
+    'Serbia 2.', 'Slovakia 1.', 'Slovakia 2.', 'Slovenia 1.', 'Slovenia 2.', 'South Africa 1.',
+    'Spain 1.', 'Spain 2.', 'Spain 3.', 'Sweden 1.', 'Sweden 2.', 'Switzerland 1.',
+    'Switzerland 2.', 'Tunisia 1.', 'Turkey 1.', 'Turkey 2.', 'Ukraine 1.', 'UAE 1.',
+    'USA 1.', 'USA 2.', 'Uruguay 1.', 'Uzbekistan 1.', 'Venezuela 1.', 'Wales 1.'
 ]
+
 PRESET_LEAGUES = {
-    "Top 5 Europe": {'England 1.','France 1.','Germany 1.','Italy 1.','Spain 1.'},
+    "Top 5 Europe": {'England 1.', 'France 1.', 'Germany 1.', 'Italy 1.', 'Spain 1.'},
     "Top 20 Europe": {
         'England 1.','Italy 1.','Spain 1.','Germany 1.','France 1.',
         'England 2.','Portugal 1.','Belgium 1.','Turkey 1.','Germany 2.','Spain 2.','France 2.',
@@ -63,32 +70,44 @@ PRESET_LEAGUES = {
     },
     "EFL (England 2–4)": {'England 2.','England 3.','England 4.'}
 }
+
 FEATURES = [
-    'Defensive duels per 90','Defensive duels won, %','Aerial duels per 90','Aerial duels won, %','PAdj Interceptions',
-    'Non-penalty goals per 90','xG per 90','Shots per 90','Shots on target, %','Goal conversion, %',
-    'Crosses per 90','Accurate crosses, %','Dribbles per 90','Successful dribbles, %','Head goals per 90',
-    'Key passes per 90','Touches in box per 90','Progressive runs per 90','Accelerations per 90',
-    'Passes per 90','Accurate passes, %','xA per 90','Passes to penalty area per 90','Accurate passes to penalty area, %',
-    'Deep completions per 90','Smart passes per 90',
+    'Defensive duels per 90', 'Defensive duels won, %',
+    'Aerial duels per 90', 'Aerial duels won, %',
+    'PAdj Interceptions', 'Non-penalty goals per 90', 'xG per 90',
+    'Shots per 90', 'Shots on target, %', 'Goal conversion, %',
+    'Crosses per 90', 'Accurate crosses, %', 'Dribbles per 90',
+    'Successful dribbles, %', 'Head goals per 90', 'Key passes per 90',
+    'Touches in box per 90', 'Progressive runs per 90', 'Accelerations per 90',
+    'Passes per 90', 'Accurate passes, %', 'xA per 90',
+    'Passes to penalty area per 90', 'Accurate passes to penalty area, %',
+    'Deep completions per 90', 'Smart passes per 90',
 ]
+
 POLAR_METRICS = [
     "Non-penalty goals per 90","xG per 90","Shots per 90",
     "Dribbles per 90","Passes to penalty area per 90","Touches in box per 90",
     "Aerial duels per 90","Aerial duels won, %","Passes per 90",
     "Accurate passes, %","xA per 90","Progressive runs per 90",
 ]
+
 # Role buckets
 ROLES = {
     'Target Man CF': {'desc': "Aerial outlet, duel dominance, occupy CBs, threaten crosses & second balls.",
-                      'metrics': {'Aerial duels per 90': 3,'Aerial duels won, %': 4}},
+                      'metrics': { 'Aerial duels per 90': 3, 'Aerial duels won, %': 4 }},
     'Goal Threat CF': {'desc': "High shot & xG volume, box presence, consistent SoT and finishing.",
-                       'metrics': {'Non-penalty goals per 90': 3,'Shots per 90': 1.5,'xG per 90': 3,'Touches in box per 90': 1,'Shots on target, %': 0.5}},
+                       'metrics': {'Non-penalty goals per 90': 3,'Shots per 90': 1.5,'xG per 90': 3,
+                                   'Touches in box per 90': 1,'Shots on target, %': 0.5}},
     'Link-Up CF': {'desc': "Combine & create; link play; progress & deliver to the penalty area.",
-                   'metrics': {'Passes per 90': 2,'Passes to penalty area per 90': 1.5,'Deep completions per 90': 1,'Smart passes per 90': 1.5,
-                               'Accurate passes, %': 1.5,'Key passes per 90': 1,'Dribbles per 90': 2,'Successful dribbles, %': 1,'Progressive runs per 90': 2,'xA per 90': 3}},
+                   'metrics': {'Passes per 90': 2, 'Passes to penalty area per 90': 1.5,
+                               'Deep completions per 90': 1, 'Smart passes per 90': 1.5,
+                               'Accurate passes, %': 1.5, 'Key passes per 90': 1,
+                               'Dribbles per 90': 2, 'Successful dribbles, %': 1,
+                               'Progressive runs per 90': 2, 'xA per 90': 3}},
     'All in': {'desc': "Blend of creation + scoring; balanced all-round attacking profile.",
-               'metrics': {'xA per 90': 2,'Dribbles per 90': 2,'xG per 90': 3,'Non-penalty goals per 90': 3}},
+               'metrics': { 'xA per 90': 2, 'Dribbles per 90': 2, 'xG per 90': 3, 'Non-penalty goals per 90': 3 }}
 }
+
 LEAGUE_STRENGTHS = {
     'England 1.':100.00,'Italy 1.':97.14,'Spain 1.':94.29,'Germany 1.':94.29,'France 1.':91.43,
     'Brazil 1.':82.86,'England 2.':71.43,'Portugal 1.':71.43,'Argentina 1.':71.43,
@@ -133,14 +152,14 @@ df = load_df()
 with st.sidebar:
     st.header("Filters")
     c1, c2, c3 = st.columns([1,1,1])
-    use_top5 = c1.checkbox("Top-5", value=False)
+    use_top5  = c1.checkbox("Top-5", value=False)
     use_top20 = c2.checkbox("Top-20", value=False)
-    use_efl = c3.checkbox("EFL", value=False)
+    use_efl   = c3.checkbox("EFL", value=False)
 
     seed = set()
-    if use_top5: seed |= PRESET_LEAGUES["Top 5 Europe"]
+    if use_top5:  seed |= PRESET_LEAGUES["Top 5 Europe"]
     if use_top20: seed |= PRESET_LEAGUES["Top 20 Europe"]
-    if use_efl: seed |= PRESET_LEAGUES["EFL (England 2–4)"]
+    if use_efl:   seed |= PRESET_LEAGUES["EFL (England 2–4)"]
 
     leagues_avail = sorted(set(INCLUDED_LEAGUES) | set(df.get("League", pd.Series([])).dropna().unique()))
     default_leagues = sorted(seed) if seed else INCLUDED_LEAGUES
@@ -149,19 +168,21 @@ with st.sidebar:
     # numeric coercions
     df["Minutes played"] = pd.to_numeric(df["Minutes played"], errors="coerce")
     df["Age"] = pd.to_numeric(df["Age"], errors="coerce")
-
     min_minutes, max_minutes = st.slider("Minutes played", 0, 5000, (500, 5000))
     age_min_data = int(np.nanmin(df["Age"])) if df["Age"].notna().any() else 14
     age_max_data = int(np.nanmax(df["Age"])) if df["Age"].notna().any() else 45
-    min_age, max_age = st.slider("Age", age_min_data, age_max_data, (16, 33))
+    min_age, max_age = st.slider("Age", age_min_data, age_max_data, (16, 40))
+
     pos_text = st.text_input("Position startswith", "CF")
 
     # Defaults OFF; league beta default shown as 0.40 but toggle unticked
     apply_contract = st.checkbox("Filter by contract expiry", value=False)
     cutoff_year = st.slider("Max contract year (inclusive)", 2025, 2030, 2026)
+
     min_strength, max_strength = st.slider("League quality (strength)", 0, 101, (0, 101))
     use_league_weighting = st.checkbox("Use league weighting in role score", value=False)
-    beta = st.slider("League weighting beta", 0.0, 1.0, 0.40, 0.05, help="0 = ignore league strength; 1 = only league strength")
+    beta = st.slider("League weighting beta", 0.0, 1.0, 0.40, 0.05,
+                     help="0 = ignore league strength; 1 = only league strength")
 
     # Market value
     df["Market value"] = pd.to_numeric(df["Market value"], errors="coerce")
@@ -177,12 +198,13 @@ with st.sidebar:
         max_value = mv_max_m * 1_000_000
     else:
         min_value, max_value = st.slider("Range (€)", 0, mv_cap, (0, mv_cap), step=100_000)
-
-    value_band_max = st.number_input("Value band (tab 4 max €)", min_value=0, value=min_value if min_value>0 else 5_000_000, step=250_000)
+    value_band_max = st.number_input("Value band (tab 4 max €)", min_value=0,
+                                     value=min_value if min_value>0 else 5_000_000, step=250_000)
 
     st.subheader("Minimum performance thresholds")
     enable_min_perf = st.checkbox("Require minimum percentile on selected metrics", value=False)
-    sel_metrics = st.multiselect("Metrics to threshold", FEATURES[:], default=['Non-penalty goals per 90','xG per 90'] if enable_min_perf else [])
+    sel_metrics = st.multiselect("Metrics to threshold", FEATURES[:],
+                                 default=['Non-penalty goals per 90','xG per 90'] if enable_min_perf else [])
     min_pct = st.slider("Minimum percentile (0–100)", 0, 100, 60)
 
     top_n = st.number_input("Top N per table", 5, 200, 50, 5)
@@ -212,18 +234,41 @@ if apply_contract:
 df_f["League Strength"] = df_f["League"].map(LEAGUE_STRENGTHS).fillna(0.0)
 df_f = df_f[(df_f["League Strength"] >= float(min_strength)) & (df_f["League Strength"] <= float(max_strength))]
 df_f = df_f[(df_f["Market value"] >= min_value) & (df_f["Market value"] <= max_value)]
-
 if df_f.empty:
     st.warning("No players after filters. Loosen filters.")
     st.stop()
 
 # ----------------- PERCENTILES FOR TABLES (per league) -----------------
 for c in FEATURES:
+ # --- Make single-player role scores identical to table scores ---
+ROLE_METRICS = sorted({m for r in ROLES.values() for m in r["metrics"]})
+
+def player_role_scores_from_row(row: pd.Series, *, use_weight=False, beta=0.40) -> dict:
+    out = {}
+    ls = float(LEAGUE_STRENGTHS.get(str(row["League"]), 50.0))
+    for role, rd in ROLES.items():
+        weights = rd["metrics"]; total = sum(weights.values()) or 1.0
+        acc = 0.0
+        for m, w in weights.items():
+            col = f"{m} Percentile"  # SAME columns the tables use
+            v = float(row[col]) if col in row and pd.notna(row[col]) else 0.0
+            acc += v * w
+        score = acc / total
+        if use_weight:
+            score = (1 - beta) * score + beta * ls  # same league weighting form
+        out[role] = score
+    return out
+   
     df_f[c] = pd.to_numeric(df_f[c], errors="coerce")
 df_f = df_f.dropna(subset=FEATURES)
-
 for feat in FEATURES:
     df_f[f"{feat} Percentile"] = df_f.groupby("League")[feat].transform(lambda x: x.rank(pct=True) * 100.0)
+role_scores = player_role_scores_from_row(
+    player_row.iloc[0],
+    use_weight=use_player_league_weight,
+    beta=beta_player
+)
+
 
 # ----------------- ROLE SCORING (tables) -----------------
 def compute_weighted_role_score(df_in: pd.DataFrame, metrics: dict, beta: float, league_weighting: bool) -> pd.Series:
@@ -250,9 +295,9 @@ if enable_min_perf and sel_metrics:
         if pct_col in df_f.columns:
             keep_mask &= (df_f[pct_col] >= min_pct)
     df_f = df_f[keep_mask]
-if df_f.empty:
-    st.warning("No players meet the minimum performance thresholds. Loosen thresholds.")
-    st.stop()
+    if df_f.empty:
+        st.warning("No players meet the minimum performance thresholds. Loosen thresholds.")
+        st.stop()
 
 # ----------------- HELPERS -----------------
 def fmt_cols(df_in: pd.DataFrame, score_col: str) -> pd.DataFrame:
@@ -270,34 +315,34 @@ def top_table(df_in: pd.DataFrame, role: str, head_n: int) -> pd.DataFrame:
 
 def filtered_view(df_in: pd.DataFrame, *, age_max=None, contract_year=None, value_max=None):
     t = df_in.copy()
-    if age_max is not None: t = t[t["Age"] <= age_max]
-    if contract_year is not None: t = t[t["Contract expires"].dt.year <= contract_year]
-    if value_max is not None: t = t[t["Market value"] <= value_max]
+    if age_max is not None:
+        t = t[t["Age"] <= age_max]
+    if contract_year is not None:
+        t = t[t["Contract expires"].dt.year <= contract_year]
+    if value_max is not None:
+        t = t[t["Market value"] <= value_max]
     return t
 
 # ----------------- TABS (tables) -----------------
-tabs = st.tabs(["Overall Top N", "U23 Top N", "Expiring Contracts", "Value Band (≤ max €)"])
+tabs = st.tabs(["Overall Top", "U23 Top", "Expiring Contracts", "Value Band (≤ max €)"])
 for role, role_def in ROLES.items():
     with tabs[0]:
         st.subheader(f"{role} — Overall Top {int(top_n)}")
         st.caption(role_def.get("desc", ""))
         st.dataframe(top_table(df_f, role, int(top_n)), use_container_width=True)
         st.divider()
-
     with tabs[1]:
         u23_cutoff = st.number_input(f"{role} — U23 cutoff", min_value=16, max_value=30, value=23, step=1, key=f"u23_{role}")
         st.subheader(f"{role} — U{u23_cutoff} Top {int(top_n)}")
         st.caption(role_def.get("desc", ""))
         st.dataframe(top_table(filtered_view(df_f, age_max=u23_cutoff), role, int(top_n)), use_container_width=True)
         st.divider()
-
     with tabs[2]:
         exp_year = st.number_input(f"{role} — Expiring by year", min_value=2024, max_value=2030, value=cutoff_year, step=1, key=f"exp_{role}")
         st.subheader(f"{role} — Contracts expiring ≤ {exp_year}")
         st.caption(role_def.get("desc", ""))
         st.dataframe(top_table(filtered_view(df_f, contract_year=exp_year), role, int(top_n)), use_container_width=True)
         st.divider()
-
     with tabs[3]:
         v_max = st.number_input(f"{role} — Max value (€)", min_value=0, value=value_band_max, step=100_000, key=f"val_{role}")
         st.subheader(f"{role} — Value band ≤ €{v_max:,.0f}")
@@ -322,7 +367,6 @@ with st.container():
     min_minutes_pool, max_minutes_pool = c2.slider("Pool minutes", 0, 5000, (500, 5000))
     age_min_pool, age_max_pool = c3.slider("Pool age", 14, 45, (16, 40))  # default 16–40
     same_pos = st.checkbox("Limit pool to current position prefix", value=True)
-
     c4, c5 = st.columns([1.2, 2])
     use_player_league_weight = c4.checkbox("Weight player role scores by league", value=False)
     beta_player = c5.slider("Player role beta (league vs. metrics)", 0.0, 1.0, 0.40, 0.05)
@@ -358,7 +402,8 @@ def percentiles_for_player_in_pool(pool_df: pd.DataFrame, ply_row: pd.Series) ->
         return {}
     pct_map = {}
     for m in POLAR_METRICS:
-        if m not in pool_df.columns or pd.isna(ply_row[m]): continue
+        if m not in pool_df.columns or pd.isna(ply_row[m]): 
+            continue
         series = pd.to_numeric(pool_df[m], errors="coerce").dropna()
         if series.empty: continue
         rank = (series < float(ply_row[m])).mean() * 100.0
@@ -384,14 +429,14 @@ S_W_MAP = {
     'Aerial duels per 90': {'style': 'Target Man', 'strength': 'Aerial Presence', 'weak': 'Aerial Presence'},
     'Aerial duels won, %': {'style': None, 'strength': 'Aerial Duels', 'weak': 'Aerial Duels'},
     'Non-penalty goals per 90': {'style': None, 'strength': 'Scoring Goals', 'weak': 'Scoring Goals'},
-    'xG per 90': {'style': 'Good shot locations', 'strength': 'Attacking Positioning', 'weak': 'Attacking Positioning'},
-    'Shots per 90': {'style': 'High shot volume', 'strength': None, 'weak': None},
+    'xG per 90': {'style': 'Shots are from good goal scoring positions', 'strength': 'Attacking Positioning', 'weak': 'Attacking Positioning'},
+    'Shots per 90': {'style': 'Gets a lot of shots off', 'strength': 'Shot Volume', 'weak': 'Shot Volume'},
     'Goal conversion, %': {'style': None, 'strength': 'Finishing', 'weak': 'Finishing'},
-    'Crosses per 90': {'style': 'Crossing Volume', 'strength': None, 'weak': None},
+    'Crosses per 90': {'style': 'Moves wide to create chances', 'strength': None, 'weak': None},
     'Accurate crosses, %': {'style': None, 'strength': 'Crossing', 'weak': 'Crossing'},
-    'Dribbles per 90': {'style': '1v1 Dribbler', 'strength': None, 'weak': None},
-    'Successful dribbles, %': {'style': None, 'strength': 'Dribbling', 'weak': 'Dribbling'},
-    'Touches in box per 90': {'style': 'Busy in box', 'strength': None, 'weak': None},
+    'Dribbles per 90': {'style': '1v1 Dribbler', 'strength': 'Dribbling', 'weak': 'Dribbling'},
+    'Successful dribbles, %': {'style': None, 'strength': 'Retention in carries', 'weak': 'Retention in carries'},
+    'Touches in box per 90': {'style': 'Busy in the penalty box', 'strength': 'Penalty box coverage', 'weak': 'Penalty box coverage'},
     'Progressive runs per 90': {'style': 'Ball Carrier', 'strength': 'Progressive Runs', 'weak': 'Progressive Runs'},
     'Passes per 90': {'style': 'Active in build-up', 'strength': None, 'weak': None},
     'Accurate passes, %': {'style': None, 'strength': 'Retention', 'weak': 'Retention'},
@@ -422,15 +467,16 @@ def plot_attacker_polar_chart(labels, vals):
     for i in range(N):
         ax.bar(ang[i], vals[i], width=width, color=bar_colors[i], edgecolor='black', linewidth=1.0, zorder=3)
         label_pos = max(12, vals[i] * 0.75)
-        ax.text(ang[i], label_pos, f"{int(round(vals[i]))}", ha='center', va='center', fontsize=9, weight='bold', color='white', zorder=4)
+        ax.text(ang[i], label_pos, f"{int(round(vals[i]))}", ha='center', va='center',
+                fontsize=9, weight='bold', color='white', zorder=4)
 
     outer = plt.Circle((0, 0), 100, transform=ax.transData._b, color='black', fill=False, linewidth=2.2, zorder=5)
     ax.add_artist(outer)
-
     for i in range(N):
         sep_angle = (ang[i] - width/2) % (2*np.pi)
         is_cross = any(np.isclose(sep_angle, a, atol=0.01) for a in [0, np.pi/2, np.pi, 3*np.pi/2])
-        ax.plot([sep_angle, sep_angle], [0, 100], color='black' if is_cross else '#b0b0b0', linewidth=1.6 if is_cross else 1.0, zorder=2)
+        ax.plot([sep_angle, sep_angle], [0, 100], color='black' if is_cross else '#b0b0b0',
+                linewidth=1.6 if is_cross else 1.0, zorder=2)
 
     label_r = 120
     for i, lab in enumerate(labels):
@@ -461,7 +507,8 @@ else:
         # Role scores based on pool percentiles (with optional league weighting for the player)
         player_ls = float(LEAGUE_STRENGTHS.get(str(ply["League"]), 50.0))
         role_scores = player_role_scores_from_pct(
-            pct_map, player_league_strength=player_ls, use_weight=use_player_league_weight, beta=beta_player
+            pct_map, player_league_strength=player_ls,
+            use_weight=use_player_league_weight, beta=beta_player
         )
 
         # Role table with gradient colors
@@ -473,25 +520,24 @@ else:
                 r1,g1,b1 = (244,209,102); r2,g2,b2 = (34,197,94); t = (v-50)/50
             r = int(r1 + (r2-r1)*t); g = int(g1 + (g2-g1)*t); b = int(b1 + (b2-b1)*t)
             return f"background-color: rgb({r},{g},{b})"
-
         rows = [{"Role": r, "Percentile": role_scores.get(r, np.nan)} for r in ROLES.keys()]
         role_df = pd.DataFrame(rows).set_index("Role")
-        styled = (
-            role_df.style
-            .applymap(lambda x: score_to_color(float(x)) if pd.notna(x) else "background-color:#fff", subset=["Percentile"])
-            .format({"Percentile": lambda x: f"{int(round(x))}" if pd.notna(x) else "—"})
-        )
+        styled = role_df.style.applymap(lambda x: score_to_color(float(x)) if pd.notna(x) else "background-color:#fff",
+                                        subset=["Percentile"]) \
+                               .format({"Percentile": lambda x: f"{int(round(x))}" if pd.notna(x) else "—"})
         st.dataframe(styled, use_container_width=True)
 
         # ---------- NOTES (Style + strengths/weaknesses from extra metrics) ----------
         def percentile_in_series(value, series: pd.Series) -> float:
             s = pd.to_numeric(series, errors="coerce").dropna()
-            if len(s) == 0 or pd.isna(value): return np.nan
+            if len(s) == 0 or pd.isna(value):
+                return np.nan
             rank = (s < float(value)).mean() * 100.0
             eq_share = (s == float(value)).mean() * 100.0
             return min(100.0, rank + 0.5 * eq_share)
 
         st.subheader("📝 Notes")
+
         EXTRA_METRICS = [
             'Defensive duels per 90','Aerial duels per 90','Aerial duels won, %',
             'Non-penalty goals per 90','xG per 90','Shots per 90','Goal conversion, %',
@@ -499,6 +545,7 @@ else:
             'Touches in box per 90','Progressive runs per 90','Passes per 90','Accurate passes, %',
             'xA per 90','Passes to penalty area per 90','Deep completions per 90','Smart passes per 90'
         ]
+
         STYLE_MAP = {
             'Defensive duels per 90': {'style':'High work rate','sw':'Defensive Duels'},
             'Aerial duels won, %': {'style':None,'sw':'Aerial Duels'},
@@ -520,10 +567,12 @@ else:
             'Deep completions per 90': {'style':None,'sw':'Deep Completions'},
             'Smart passes per 90': {'style':None,'sw':'Smart Passes'},
         }
+
         HI, LO, STYLE_T = 75, 25, 65  # thresholds
 
         def chips(items, color):
-            if not items: return "_None identified._"
+            if not items:
+                return "_None identified._"
             spans = [
                 f"<span style='background:{color};color:#111;padding:2px 6px;border-radius:10px;margin:0 6px 6px 0;display:inline-block'>{txt}</span>"
                 for txt in items[:10]
@@ -536,6 +585,7 @@ else:
             for m in EXTRA_METRICS:
                 if m in df.columns and m in pool_df.columns and pd.notna(ply.get(m)):
                     pct_extra[m] = percentile_in_series(ply[m], pool_df[m])
+
         for m in EXTRA_METRICS:
             if m not in pct_extra or pd.isna(pct_extra[m]):
                 col = f"{m} Percentile"
@@ -544,13 +594,17 @@ else:
 
         strengths, weaknesses, styles = [], [], []
         for m, v in pct_extra.items():
-            if pd.isna(v): continue
+            if pd.isna(v):
+                continue
             lab = STYLE_MAP.get(m, {})
             sw_name = lab.get('sw', m)
             style_tag = lab.get('style')
-            if v >= HI: strengths.append((sw_name, v))
-            elif v <= LO: weaknesses.append((sw_name, v))
-            if style_tag and v >= STYLE_T: styles.append((style_tag, v))
+            if v >= HI:
+                strengths.append((sw_name, v))
+            elif v <= LO:
+                weaknesses.append((sw_name, v))
+            if style_tag and v >= STYLE_T:
+                styles.append((style_tag, v))
 
         # De-dupe & sort
         if strengths:
@@ -585,26 +639,32 @@ else:
                         best_val = float(player_row[col].iloc[0]); best_role = r
             if best_role is not None:
                 best_line = f"**Best role (league):** {best_role}."
-        if best_line: st.markdown(best_line)
+        if best_line:
+            st.markdown(best_line)
 
         st.markdown("**Style:**")
         st.markdown(chips(styles, "#bfdbfe"), unsafe_allow_html=True)  # light blue
+
         st.markdown("**Strengths:**")
         st.markdown(chips(strengths, "#a7f3d0"), unsafe_allow_html=True)  # light green
+
         st.markdown("**Weaknesses / growth areas:**")
         st.markdown(chips(weaknesses, "#fecaca"), unsafe_allow_html=True)  # light red
 
         # ---------- POLAR CHART ----------
         labels = [clean_attacker_label(m) for m in POLAR_METRICS if m in pct_map]
-        vals = [pct_map[m] for m in POLAR_METRICS if m in pct_map]
+        vals   = [pct_map[m] for m in POLAR_METRICS if m in pct_map]
         if vals:
             fig = plot_attacker_polar_chart(labels, vals)
             team = str(ply["Team"]); league = str(ply["League"])
-            fig.text(0.06, 0.94, f"{player_name} — Performance (pool size: {len(pool_df):,})", fontsize=16, weight='bold', ha='left', color='#111827')
-            fig.text(0.06, 0.915, f"Against selected pool • Team: {team} • Native league: {league}", fontsize=9, ha='left', color='#6b7280')
+            fig.text(0.06, 0.94, f"{player_name} — Performance (pool size: {len(pool_df):,})",
+                     fontsize=16, weight='bold', ha='left', color='#111827')
+            fig.text(0.06, 0.915, f"Against selected pool • Team: {team} • Native league: {league}",
+                     fontsize=9, ha='left', color='#6b7280')
             st.pyplot(fig, use_container_width=True)
         else:
             st.info("Not enough metrics to draw the polar chart.")
+
 
 # =====================================================================
 # ============== BELOW THE NOTES: 3 EXTRA FEATURE BLOCKS ==============
@@ -612,22 +672,19 @@ else:
 
 # ----------------- (A) COMPARISON RADAR (SB-STYLE) -----------------
 st.markdown("---")
-st.header("📊 Player Comparison — SB Radar")
-
+st.header("📊 Player Comparison")
 with st.expander("Radar settings", expanded=False):
     # default pos prefix from selected player
     pos_scope = st.text_input("Position startswith (radar pool)", default_pos_prefix, key="rad_pos")
-
     df["Minutes played"] = pd.to_numeric(df["Minutes played"], errors="coerce")
-    df["Age"] = pd.to_numeric(df["Age"], errors="coerce")
-
+    df["Age"]            = pd.to_numeric(df["Age"], errors="coerce")
     min_minutes_r, max_minutes_r = st.slider("Minutes filter (radar pool)", 0, 5000, (500, 5000), key="rad_min")
-
     # default age 16–40 (changed from 16–33)
     age_min_r_bound = int(np.nanmin(df["Age"])) if df["Age"].notna().any() else 14
     age_max_r_bound = int(np.nanmax(df["Age"])) if df["Age"].notna().any() else 45
-    min_age_r, max_age_r = st.slider("Age filter (radar pool)", age_min_r_bound, age_max_r_bound, (16, 40), key="rad_age")
-
+    min_age_r, max_age_r = st.slider("Age filter (radar pool)",
+                                     age_min_r_bound, age_max_r_bound,
+                                     (16, 40), key="rad_age")
     picker_pool = df[df["Position"].astype(str).str.startswith(tuple([pos_scope]))].copy()
     players = sorted(picker_pool["Player"].dropna().unique().tolist())
     if len(players) < 2:
@@ -639,7 +696,6 @@ with st.expander("Radar settings", expanded=False):
         pA_index = players.index(player_name)
     except Exception:
         pA_index = 0
-
     pA = st.selectbox("Player A (red)", players, index=pA_index, key="rad_a")
 
     # default Player B = next one (or index 1)
@@ -654,219 +710,179 @@ with st.expander("Radar settings", expanded=False):
         "Aerial duels per 90","Aerial duels won, %","Passes per 90",
         "Accurate passes, %","xA per 90"
     ]
-
     numeric_cols = df.select_dtypes(include="number").columns.tolist()
     metrics_default = [m for m in DEFAULT_METRICS if m in df.columns]
     radar_metrics = st.multiselect("Radar metrics", [c for c in df.columns if c in numeric_cols], metrics_default, key="rad_ms")
-
     sort_by_gap = st.checkbox("Sort axes by biggest gap", False, key="rad_sort")
-    show_avg = st.checkbox("Show pool average (thin line)", True, key="rad_avg")
+    show_avg    = st.checkbox("Show pool average (thin line)", True, key="rad_avg")
 
-    # Build radar pool and draw
-    def clean_label_r(s: str) -> str:
-        s = s.replace("Non-penalty goals per 90", "Non-Pen Goals")
-        s = s.replace("xG per 90", "xG").replace("xA per 90", "xA")
-        s = s.replace("Shots per 90", "Shots").replace("Passes per 90", "Passes")
-        s = s.replace("Touches in box per 90", "Touches in box").replace("Aerial duels per 90", "Aerial duels")
-        s = s.replace("Successful dribbles, %", "Dribble %").replace("Accurate passes, %", "Pass %")
-        s = re.sub(r"\s*per\s*90", "", s, flags=re.I); return s
+# Build radar pool and draw
+def clean_label_r(s: str) -> str:
+    s = s.replace("Non-penalty goals per 90", "Non-Pen Goals")
+    s = s.replace("xG per 90", "xG").replace("xA per 90", "xA")
+    s = s.replace("Shots per 90", "Shots").replace("Passes per 90", "Passes")
+    s = s.replace("Touches in box per 90", "Touches in box").replace("Aerial duels per 90", "Aerial duels")
+    s = s.replace("Successful dribbles, %", "Dribble %").replace("Accurate passes, %", "Pass %")
+    s = re.sub(r"\s*per\s*90", "", s, flags=re.I); return s
 
-    if radar_metrics:
-        try:
-            rowA = df[df["Player"] == pA].iloc[0]; rowB = df[df["Player"] == pB].iloc[0]
-            union_leagues = {rowA["League"], rowB["League"]}
-            pool = df[(df["League"].isin(union_leagues)) &
-                      (df["Position"].astype(str).str.startswith(tuple([pos_scope]))) &
-                      (df["Minutes played"].between(min_minutes_r, max_minutes_r)) &
-                      (df["Age"].between(min_age_r, max_age_r))].copy()
+if radar_metrics:
+    try:
+        rowA = df[df["Player"] == pA].iloc[0]; rowB = df[df["Player"] == pB].iloc[0]
+        union_leagues = {rowA["League"], rowB["League"]}
+        pool = df[(df["League"].isin(union_leagues)) &
+                  (df["Position"].astype(str).str.startswith(tuple([pos_scope]))) &
+                  (df["Minutes played"].between(min_minutes_r, max_minutes_r)) &
+                  (df["Age"].between(min_age_r, max_age_r))].copy()
+        for m in radar_metrics: pool[m] = pd.to_numeric(pool[m], errors="coerce")
+        pool = pool.dropna(subset=radar_metrics)
+        if not pool.empty:
+            labels = [clean_label_r(m) for m in radar_metrics]
+            pool_pct = pool[radar_metrics].rank(pct=True) * 100.0
+            def pct_for(player):
+                sub_idx = pool[pool["Player"] == player].index
+                if len(sub_idx)==0: return np.full(len(radar_metrics), np.nan)
+                return pool_pct.loc[sub_idx, :].mean(axis=0).values
+            A_r = pct_for(pA); B_r = pct_for(pB); AVG_r = np.full(len(radar_metrics), 50.0)
 
-            for m in radar_metrics:
-                pool[m] = pd.to_numeric(pool[m], errors="coerce")
-            pool = pool.dropna(subset=radar_metrics)
+            axis_min = pool[radar_metrics].min().values
+            axis_max = pool[radar_metrics].max().values
+            pad = (axis_max - axis_min) * 0.07
+            axis_min = axis_min - pad; axis_max = axis_max + pad
+            ring_radii = np.linspace(10, 100, 11)
+            axis_ticks = [np.linspace(axis_min[i], axis_max[i], 11) for i in range(len(labels))]
 
-            if not pool.empty:
-                labels = [clean_label_r(m) for m in radar_metrics]
-                pool_pct = pool[radar_metrics].rank(pct=True) * 100.0
+            if sort_by_gap:
+                order = np.argsort(-np.abs(A_r - B_r))
+                labels   = [labels[i] for i in order]
+                A_r      = A_r[order]; B_r = B_r[order]; AVG_r = AVG_r[order]
+                axis_ticks = [axis_ticks[i] for i in order]
 
-                def pct_for(player):
-                    sub_idx = pool[pool["Player"] == player].index
-                    if len(sub_idx)==0:
-                        return np.full(len(radar_metrics), np.nan)
-                    return pool_pct.loc[sub_idx, :].mean(axis=0).values
+            # draw
+            COL_A = "#C81E1E"; COL_B = "#1D4ED8"
+            FILL_A = (200/255, 30/255, 30/255, 0.60)
+            FILL_B = (29/255, 78/255, 216/255, 0.60)
+            PAGE_BG = AX_BG = "#FFFFFF"
+            GRID_BAND_A = "#FFFFFF"; GRID_BAND_B = "#E5E7EB"; RING_COLOR = "#D1D5DB"; RING_LW = 1.0
+            LABEL_COLOR = "#0F172A"; TITLE_FS = 26; SUB_FS = 12; AXIS_FS = 10
+            TICK_FS = 7; TICK_COLOR = "#9CA3AF"; INNER_HOLE = 10
 
-                A_r = pct_for(pA); B_r = pct_for(pB); AVG_r = np.full(len(radar_metrics), 50.0)
+            def draw_radar(labels, A_r, B_r, ticks, headerA, subA, subA2, headerB, subB, subB2,
+                           show_avg=False, AVG_r=None):
+                N = len(labels)
+                theta = np.linspace(0, 2*np.pi, N, endpoint=False)
+                theta_closed = np.concatenate([theta, theta[:1]])
+                Ar = np.concatenate([A_r, A_r[:1]]); Br = np.concatenate([B_r, B_r[:1]])
+                fig = plt.figure(figsize=(13.2, 8.0), dpi=260); fig.patch.set_facecolor(PAGE_BG)
+                ax = plt.subplot(111, polar=True); ax.set_facecolor(AX_BG)
+                ax.set_theta_offset(np.pi/2); ax.set_theta_direction(-1)
+                ax.set_xticks(theta); ax.set_xticklabels(labels, fontsize=AXIS_FS, color=LABEL_COLOR, fontweight=600)
+                ax.set_yticks([]); ax.grid(False); [s.set_visible(False) for s in ax.spines.values()]
+                for i in range(10):
+                    r0, r1 = np.linspace(INNER_HOLE,100,11)[i], np.linspace(INNER_HOLE,100,11)[i+1]
+                    band = GRID_BAND_A if i % 2 == 0 else GRID_BAND_B
+                    ax.add_artist(Wedge((0,0), r1, 0, 360, width=(r1-r0),
+                                        transform=ax.transData._b, facecolor=band, edgecolor="none", zorder=0.8))
+                ring_t = np.linspace(0, 2*np.pi, 361)
+                for r in np.linspace(INNER_HOLE,100,11):
+                    ax.plot(ring_t, np.full_like(ring_t, r), color=RING_COLOR, lw=RING_LW, zorder=0.9)
+                start_idx = 2
+                for i, ang in enumerate(theta):
+                    vals = ticks[i][start_idx:]
+                    for rr, v in zip(np.linspace(INNER_HOLE,100,11)[start_idx:], vals):
+                        ax.text(ang, rr-1.8, f"{v:.1f}", ha="center", va="center",
+                                fontsize=TICK_FS, color=TICK_COLOR, zorder=1.1)
+                ax.add_artist(Circle((0,0), radius=INNER_HOLE-0.6, transform=ax.transData._b,
+                                     color=PAGE_BG, zorder=1.2, ec="none"))
+                if show_avg and AVG_r is not None:
+                    Avg = np.concatenate([AVG_r, AVG_r[:1]])
+                    ax.plot(theta_closed, Avg, lw=1.5, color="#94A3B8", ls="--", alpha=0.9, zorder=2.2)
+                ax.plot(theta_closed, Ar, color=COL_A, lw=2.2, zorder=3); ax.fill(theta_closed, Ar, color=FILL_A, zorder=2.5)
+                ax.plot(theta_closed, Br, color=COL_B, lw=2.2, zorder=3); ax.fill(theta_closed, Br, color=FILL_B, zorder=2.5)
+                ax.set_rlim(0, 105)
+                minsA = f"{int(pd.to_numeric(rowA.get('Minutes played',0))):,} mins" if pd.notna(rowA.get('Minutes played')) else "Minutes: N/A"
+                minsB = f"{int(pd.to_numeric(rowB.get('Minutes played',0))):,} mins" if pd.notna(rowB.get('Minutes played')) else "Minutes: N/A"
+                fig.text(0.12, 0.96,  f"{pA}", color=COL_A, fontsize=TITLE_FS, fontweight="bold", ha="left")
+                fig.text(0.12, 0.935, f"{rowA['Team']} — {rowA['League']}", color=COL_A, fontsize=SUB_FS, ha="left")
+                fig.text(0.12, 0.915, minsA, color="#374151", fontsize=10, ha="left")
+                fig.text(0.88, 0.96,  f"{pB}", color=COL_B, fontsize=TITLE_FS, fontweight="bold", ha="right")
+                fig.text(0.88, 0.935, f"{rowB['Team']} — {rowB['League']}", color=COL_B, fontsize=SUB_FS, ha="right")
+                fig.text(0.88, 0.915, minsB, color="#374151", fontsize=10, ha="right")
+                return fig
 
-                axis_min = pool[radar_metrics].min().values
-                axis_max = pool[radar_metrics].max().values
-                pad = (axis_max - axis_min) * 0.07
-                axis_min = axis_min - pad; axis_max = axis_max + pad
-
-                ring_radii = np.linspace(10, 100, 11)
-                axis_ticks = [np.linspace(axis_min[i], axis_max[i], 11) for i in range(len(labels))]
-
-                if sort_by_gap:
-                    order = np.argsort(-np.abs(A_r - B_r))
-                    labels = [labels[i] for i in order]
-                    A_r = A_r[order]; B_r = B_r[order]; AVG_r = AVG_r[order]
-                    axis_ticks = [axis_ticks[i] for i in order]
-
-                # draw
-                COL_A = "#C81E1E"; COL_B = "#1D4ED8"
-                FILL_A = (200/255, 30/255, 30/255, 0.60)
-                FILL_B = (29/255, 78/255, 216/255, 0.60)
-                PAGE_BG = AX_BG = "#FFFFFF"
-                GRID_BAND_A = "#FFFFFF"; GRID_BAND_B = "#E5E7EB"
-                RING_COLOR = "#D1D5DB"; RING_LW = 1.0
-                LABEL_COLOR = "#0F172A"; TITLE_FS = 26; SUB_FS = 12; AXIS_FS = 10
-                TICK_FS = 7; TICK_COLOR = "#9CA3AF"; INNER_HOLE = 10
-
-                def draw_radar(labels, A_r, B_r, ticks, headerA, subA, subA2, headerB, subB, subB2, show_avg=False, AVG_r=None):
-                    N = len(labels)
-                    theta = np.linspace(0, 2*np.pi, N, endpoint=False)
-                    theta_closed = np.concatenate([theta, theta[:1]])
-                    Ar = np.concatenate([A_r, A_r[:1]])
-                    Br = np.concatenate([B_r, B_r[:1]])
-
-                    fig = plt.figure(figsize=(13.2, 8.0), dpi=260); fig.patch.set_facecolor(PAGE_BG)
-                    ax = plt.subplot(111, polar=True); ax.set_facecolor(AX_BG)
-                    ax.set_theta_offset(np.pi/2); ax.set_theta_direction(-1)
-
-                    ax.set_xticks(theta); ax.set_xticklabels(labels, fontsize=AXIS_FS, color=LABEL_COLOR, fontweight=600)
-                    ax.set_yticks([]); ax.grid(False); [s.set_visible(False) for s in ax.spines.values()]
-
-                    for i in range(10):
-                        r0, r1 = np.linspace(INNER_HOLE,100,11)[i], np.linspace(INNER_HOLE,100,11)[i+1]
-                        band = GRID_BAND_A if i % 2 == 0 else GRID_BAND_B
-                        ax.add_artist(Wedge((0,0), r1, 0, 360, width=(r1-r0),
-                                            transform=ax.transData._b, facecolor=band, edgecolor="none", zorder=0.8))
-
-                    ring_t = np.linspace(0, 2*np.pi, 361)
-                    for r in np.linspace(INNER_HOLE,100,11):
-                        ax.plot(ring_t, np.full_like(ring_t, r), color=RING_COLOR, lw=RING_LW, zorder=0.9)
-
-                    start_idx = 2
-                    for i, ang in enumerate(theta):
-                        vals = ticks[i][start_idx:]
-                        for rr, v in zip(np.linspace(INNER_HOLE,100,11)[start_idx:], vals):
-                            ax.text(ang, rr-1.8, f"{v:.1f}", ha="center", va="center", fontsize=TICK_FS, color=TICK_COLOR, zorder=1.1)
-
-                    ax.add_artist(Circle((0,0), radius=INNER_HOLE-0.6, transform=ax.transData._b, color=PAGE_BG, zorder=1.2, ec="none"))
-
-                    if show_avg and AVG_r is not None:
-                        Avg = np.concatenate([AVG_r, AVG_r[:1]])
-                        ax.plot(theta_closed, Avg, lw=1.5, color="#94A3B8", ls="--", alpha=0.9, zorder=2.2)
-
-                    ax.plot(theta_closed, Ar, color=COL_A, lw=2.2, zorder=3); ax.fill(theta_closed, Ar, color=FILL_A, zorder=2.5)
-                    ax.plot(theta_closed, Br, color=COL_B, lw=2.2, zorder=3); ax.fill(theta_closed, Br, color=FILL_B, zorder=2.5)
-
-                    ax.set_rlim(0, 105)
-
-                    minsA = f"{int(pd.to_numeric(rowA.get('Minutes played',0))):,} mins" if pd.notna(rowA.get('Minutes played')) else "Minutes: N/A"
-                    minsB = f"{int(pd.to_numeric(rowB.get('Minutes played',0))):,} mins" if pd.notna(rowB.get('Minutes played')) else "Minutes: N/A"
-
-                    fig.text(0.12, 0.96, f"{pA}", color=COL_A, fontsize=TITLE_FS, fontweight="bold", ha="left")
-                    fig.text(0.12, 0.935, f"{rowA['Team']} — {rowA['League']}", color=COL_A, fontsize=SUB_FS, ha="left")
-                    fig.text(0.12, 0.915, minsA, color="#374151", fontsize=10, ha="left")
-
-                    fig.text(0.88, 0.96, f"{pB}", color=COL_B, fontsize=TITLE_FS, fontweight="bold", ha="right")
-                    fig.text(0.88, 0.935, f"{rowB['Team']} — {rowB['League']}", color=COL_B, fontsize=SUB_FS, ha="right")
-                    fig.text(0.88, 0.915, minsB, color="#374151", fontsize=10, ha="right")
-                    return fig
-
-                figr = draw_radar(labels, A_r, B_r, axis_ticks, pA, "", "", pB, "", "", show_avg=show_avg, AVG_r=AVG_r)
-                st.pyplot(figr, use_container_width=True)
-            else:
-                st.info("No players remain in radar pool after filters.")
-        except Exception as e:
-            st.info(f"Radar could not be drawn: {e}")
+            figr = draw_radar(labels, A_r, B_r, axis_ticks, pA, "", "", pB, "", "", show_avg=show_avg, AVG_r=AVG_r)
+            st.pyplot(figr, use_container_width=True)
+        else:
+            st.info("No players remain in radar pool after filters.")
+    except Exception as e:
+        st.info(f"Radar could not be drawn: {e}")
 
 # ----------------- (B) SIMILAR PLAYERS (adjustable pool) -----------------
 st.markdown("---")
 st.header("🧭 Similar players (within adjustable pool)")
-
 with st.expander("Similarity settings", expanded=False):
     # leagues for candidates = the same main selection by default
-    sim_leagues = st.multiselect(
-        "Candidate leagues",
-        sorted(set(INCLUDED_LEAGUES) | set(df["League"].dropna().unique())),
-        default=leagues_sel,
-        key="sim_leagues"
-    )
-
+    sim_leagues = st.multiselect("Candidate leagues", sorted(set(INCLUDED_LEAGUES) | set(df["League"].dropna().unique())),
+                                 default=leagues_sel, key="sim_leagues")
     sim_min_minutes, sim_max_minutes = st.slider("Minutes played (candidates)", 0, 5000, (500, 5000), key="sim_min")
     sim_min_age, sim_max_age = st.slider("Age (candidates)", 14, 45, (16, 33), key="sim_age")
-
     percentile_weight = st.slider("Percentile weight", 0.0, 1.0, 0.7, 0.05, key="sim_pw")
     league_weight_sim = st.slider("League weight (difficulty adj.)", 0.0, 1.0, 0.2, 0.05, key="sim_lw")
     top_n_sim = st.number_input("Show top N", min_value=5, max_value=200, value=50, step=5, key="sim_top")
 
-    # similarity computation (light version: uses a fixed feature basket)
-    SIM_FEATURES = [
-        'Defensive duels per 90','Aerial duels per 90','Aerial duels won, %',
-        'Non-penalty goals per 90','xG per 90','Shots per 90',
-        'Crosses per 90','Dribbles per 90','Successful dribbles, %',
-        'Touches in box per 90','Progressive runs per 90','Passes per 90',
-        'Accurate passes, %','xA per 90','Smart passes per 90',
-        'Passes to penalty area per 90','Deep completions per 90'
-    ]
+# similarity computation (light version: uses a fixed feature basket)
+SIM_FEATURES = [
+    'Defensive duels per 90', 'Aerial duels per 90', 'Aerial duels won, %',
+    'Non-penalty goals per 90', 'xG per 90', 'Shots per 90',
+    'Crosses per 90',  'Dribbles per 90', 'Successful dribbles, %',
+    'Touches in box per 90', 'Progressive runs per 90',
+    'Passes per 90', 'Accurate passes, %', 'xA per 90', 'Smart passes per 90',
+    'Passes to penalty area per 90', 'Deep completions per 90'
+]
+if not player_row.empty:
+    target_row_full = df[df['Player'] == player_name].head(1).iloc[0]
+    target_league = target_row_full['League']
+    df_candidates = df[df['League'].isin(sim_leagues)].copy()
+    df_candidates = df_candidates[(df_candidates['Minutes played'].between(sim_min_minutes, sim_max_minutes)) &
+                                  (df_candidates['Age'].between(sim_min_age, sim_max_age))]
+    df_candidates = df_candidates.dropna(subset=SIM_FEATURES)
+    df_candidates = df_candidates[df_candidates['Player'] != player_name]
+    if not df_candidates.empty:
+        # percentile ranks within candidate pool (per-league for robustness)
+        percl = df_candidates.groupby('League')[SIM_FEATURES].rank(pct=True)
+        # target percentiles computed on df global per-league
+        target_percentiles = df.groupby('League')[SIM_FEATURES].rank(pct=True).loc[df['Player'] == player_name]
+        # standardize on candidate pool
+        scaler = StandardScaler()
+        standardized_features = scaler.fit_transform(df_candidates[SIM_FEATURES])
+        target_features_standardized = scaler.transform([target_row_full[SIM_FEATURES].values])
 
-    if not player_row.empty:
-        target_row_full = df[df['Player'] == player_name].head(1).iloc[0]
-        target_league = target_row_full['League']
+        weights = np.ones(len(SIM_FEATURES), dtype=float)
+        percentile_distances = np.linalg.norm((percl.values - target_percentiles.values) * weights, axis=1)
+        actual_value_distances = np.linalg.norm((standardized_features - target_features_standardized) * weights, axis=1)
+        combined = percentile_distances * percentile_weight + actual_value_distances * (1.0 - percentile_weight)
 
-        df_candidates = df[df['League'].isin(sim_leagues)].copy()
-        df_candidates = df_candidates[
-            (df_candidates['Minutes played'].between(sim_min_minutes, sim_max_minutes)) &
-            (df_candidates['Age'].between(sim_min_age, sim_max_age))
-        ]
-        df_candidates = df_candidates.dropna(subset=SIM_FEATURES)
-        df_candidates = df_candidates[df_candidates['Player'] != player_name]
-
-        if not df_candidates.empty:
-            # percentile ranks within candidate pool (per-league for robustness)
-            percl = df_candidates.groupby('League')[SIM_FEATURES].rank(pct=True)
-
-            # target percentiles computed on df global per-league
-            target_percentiles = df.groupby('League')[SIM_FEATURES].rank(pct=True).loc[df['Player'] == player_name]
-
-            # standardize on candidate pool
-            scaler = StandardScaler()
-            standardized_features = scaler.fit_transform(df_candidates[SIM_FEATURES])
-            target_features_standardized = scaler.transform([target_row_full[SIM_FEATURES].values])
-
-            weights = np.ones(len(SIM_FEATURES), dtype=float)
-
-            percentile_distances = np.linalg.norm((percl.values - target_percentiles.values) * weights, axis=1)
-            actual_value_distances = np.linalg.norm((standardized_features - target_features_standardized) * weights, axis=1)
-
-            combined = percentile_distances * percentile_weight + actual_value_distances * (1.0 - percentile_weight)
-
-            # robust normalization -> similarity 0..100
-            arr = np.asarray(combined, dtype=float).ravel()
-            if arr.size == 0:
-                norm = arr
-            else:
-                rng = np.ptp(arr)
-                norm = (arr - arr.min()) / (rng if rng != 0 else 1.0)
-            similarities = ((1.0 - norm) * 100.0).round(2)
-
-            out = df_candidates[['Player','Team','League','Age','Minutes played','Market value']].copy()
-            out['League strength'] = out['League'].map(LEAGUE_STRENGTHS).fillna(0.0)
-
-            tgt_ls = LEAGUE_STRENGTHS.get(target_league, 1.0)
-            league_ratio = (out['League strength'] / tgt_ls).clip(lower=0.5, upper=1.2)
-
-            out['Similarity'] = similarities
-            out['Adjusted Similarity'] = out['Similarity'] * (1 - league_weight_sim) + out['Similarity'] * league_ratio * league_weight_sim
-
-            out = out.sort_values('Adjusted Similarity', ascending=False).reset_index(drop=True)
-            out.insert(0, 'Rank', np.arange(1, len(out) + 1))
-
-            st.dataframe(out.head(int(top_n_sim)), use_container_width=True)
+        # robust normalization -> similarity 0..100
+        arr = np.asarray(combined, dtype=float).ravel()
+        if arr.size == 0:
+            norm = arr
         else:
-            st.info("No candidates after similarity filters.")
+            rng = np.ptp(arr)
+            norm = (arr - arr.min()) / (rng if rng != 0 else 1.0)
+        similarities = ((1.0 - norm) * 100.0).round(2)
+
+        out = df_candidates[['Player','Team','League','Age','Minutes played','Market value']].copy()
+        out['League strength'] = out['League'].map(LEAGUE_STRENGTHS).fillna(0.0)
+        tgt_ls = LEAGUE_STRENGTHS.get(target_league, 1.0)
+        league_ratio = (out['League strength'] / tgt_ls).clip(lower=0.5, upper=1.0)
+        out['Similarity'] = similarities
+        out['Adjusted Similarity'] = out['Similarity'] * (1 - league_weight_sim) + out['Similarity'] * league_ratio * league_weight_sim
+        out = out.sort_values('Adjusted Similarity', ascending=False).reset_index(drop=True)
+        out.insert(0, 'Rank', np.arange(1, len(out) + 1))
+        st.dataframe(out.head(int(top_n_sim)), use_container_width=True)
     else:
-        st.caption("Pick a player to see similar players.")
+        st.info("No candidates after similarity filters.")
+else:
+    st.caption("Pick a player to see similar players.")
 
 # ---------------------------- (C) CLUB FIT — self-contained block ----------------------------
 st.markdown("---")
@@ -919,7 +935,7 @@ else:
 
 # weight dials
 DEFAULT_LEAGUE_WEIGHT = 0.4
-DEFAULT_MARKET_WEIGHT  = 0.2
+DEFAULT_MARKET_WEIGHT = 0.2
 
 # features (fixed)
 CF_FEATURES = [
@@ -934,7 +950,6 @@ CF_FEATURES = [
 
 required_cols_cf = {'Player','Team','League','Age','Position','Minutes played','Market value', *CF_FEATURES}
 missing_cf = [c for c in required_cols_cf if c not in df.columns]
-
 if missing_cf:
     st.error(f"Club Fit: dataset missing required columns: {missing_cf}")
 else:
@@ -961,7 +976,10 @@ else:
                 st.session_state.candidate_leagues_cf = list(_PRESETS_CF[preset_name_cf])
 
         extra_candidate_leagues_cf = c1b.multiselect(
-            "Extra leagues to add", leagues_available_cf, default=[], key="cf_extra_leagues"
+            "Extra leagues to add",
+            leagues_available_cf,
+            default=[],
+            key="cf_extra_leagues"
         )
         leagues_selected_cf = sorted(set(st.session_state.candidate_leagues_cf) | set(extra_candidate_leagues_cf))
         st.caption(f"Candidate pool leagues: **{len(leagues_selected_cf)}** selected.")
@@ -977,17 +995,21 @@ else:
             default_target_idx = target_options_cf.index(player_name)
         except Exception:
             default_target_idx = 0 if target_options_cf else 0
-
         target_player_cf = st.selectbox(
-            "Target player", target_options_cf,
-            index=default_target_idx if target_options_cf else 0, key="cf_target_player"
+            "Target player",
+            target_options_cf,
+            index=default_target_idx if target_options_cf else 0,
+            key="cf_target_player"
         )
 
         # Minutes / age filters for candidate pool (teams built from these players)
         max_minutes_in_data_cf = int(pd.to_numeric(df.get('Minutes played', pd.Series([0])), errors='coerce').fillna(0).max())
         slider_max_minutes_cf = int(max(1000, max_minutes_in_data_cf))
         min_minutes_cf, max_minutes_cf = st.slider(
-            "Minutes filter (candidates)", 0, slider_max_minutes_cf, (500, slider_max_minutes_cf), key="cf_minutes_slider"
+            "Minutes filter (candidates)",
+            0, slider_max_minutes_cf,
+            (500, slider_max_minutes_cf),
+            key="cf_minutes_slider"
         )
 
         age_series_cf = pd.to_numeric(df.get('Age', pd.Series([16, 45])), errors='coerce')
@@ -995,7 +1017,10 @@ else:
         age_max_data_cf = int(np.nanmax(age_series_cf)) if age_series_cf.notna().any() else 45
         # default age 16–40 (changed)
         min_age_cf, max_age_cf = st.slider(
-            "Age filter (candidates)", age_min_data_cf, age_max_data_cf, (16, 40), key="cf_age_slider"
+            "Age filter (candidates)",
+            age_min_data_cf, age_max_data_cf,
+            (16, 40),
+            key="cf_age_slider"
         )
 
         min_strength_cf, max_strength_cf = st.slider("League quality (strength)", 0, 101, (0, 101), key="cf_strength")
@@ -1045,15 +1070,15 @@ else:
                 st.info("Target player not found in selected target leagues.")
             else:
                 df_target_pool_cf['Market value'] = pd.to_numeric(df_target_pool_cf['Market value'], errors='coerce')
-
                 target_row_cf = df_target_pool_cf.loc[df_target_pool_cf['Player'] == target_player_cf].iloc[0]
                 target_vector_cf = target_row_cf[CF_FEATURES].values
                 target_ls_cf = float(_LS_CF.get(target_row_cf['League'], 50.0))
 
                 # Target MV (override if provided)
                 target_market_value_cf = (
-                    float(manual_override_cf) if manual_override_cf and manual_override_cf > 0 else
-                    (float(target_row_cf['Market value']) if pd.notna(target_row_cf['Market value']) and target_row_cf['Market value'] > 0 else 2_000_000.0)
+                    float(manual_override_cf) if manual_override_cf and manual_override_cf > 0
+                    else (float(target_row_cf['Market value']) if pd.notna(target_row_cf['Market value']) and target_row_cf['Market value'] > 0
+                          else 2_000_000.0)
                 )
 
                 # Team profiles (mean of players that survived candidate filters)
@@ -1062,16 +1087,14 @@ else:
                 # Team league & average team MV from same pool
                 team_league_cf = df_candidates_cf.groupby('Team')['League'].agg(lambda x: x.mode().iloc[0] if not x.mode().empty else x.iloc[0])
                 team_market_cf = df_candidates_cf.groupby('Team')['Market value'].mean()
-
                 club_profiles_cf['League'] = club_profiles_cf['Team'].map(team_league_cf)
                 club_profiles_cf['Avg Team Market Value'] = club_profiles_cf['Team'].map(team_market_cf)
                 club_profiles_cf = club_profiles_cf.dropna(subset=['Avg Team Market Value'])
 
-                # Standardize & weighted distance
+                                # Standardize & weighted distance
                 scaler_cf = StandardScaler()
                 X_team = scaler_cf.fit_transform(club_profiles_cf[CF_FEATURES])
                 x_tgt = scaler_cf.transform([target_vector_cf])[0]
-
                 weights_vec_cf = np.array([weights_ui_cf.get(f, 1) for f in CF_FEATURES], dtype=float)
 
                 # Distance (lower = more similar)
@@ -1129,7 +1152,8 @@ else:
 
                     # Export
                     csv_cf = results_cf.to_csv(index=False).encode('utf-8')
-                    st.download_button("⬇️ Download all results (CSV)", data=csv_cf, file_name="club_fit_results.csv", mime="text/csv")
+                    st.download_button("⬇️ Download all results (CSV)", data=csv_cf,
+                                       file_name="club_fit_results.csv", mime="text/csv")
 
                     # Debug panel
                     with st.expander("Debug / Repro details"):
