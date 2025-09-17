@@ -240,10 +240,35 @@ if df_f.empty:
 
 # ----------------- PERCENTILES FOR TABLES (per league) -----------------
 for c in FEATURES:
+ # --- Make single-player role scores identical to table scores ---
+ROLE_METRICS = sorted({m for r in ROLES.values() for m in r["metrics"]})
+
+def player_role_scores_from_row(row: pd.Series, *, use_weight=False, beta=0.40) -> dict:
+    out = {}
+    ls = float(LEAGUE_STRENGTHS.get(str(row["League"]), 50.0))
+    for role, rd in ROLES.items():
+        weights = rd["metrics"]; total = sum(weights.values()) or 1.0
+        acc = 0.0
+        for m, w in weights.items():
+            col = f"{m} Percentile"  # SAME columns the tables use
+            v = float(row[col]) if col in row and pd.notna(row[col]) else 0.0
+            acc += v * w
+        score = acc / total
+        if use_weight:
+            score = (1 - beta) * score + beta * ls  # same league weighting form
+        out[role] = score
+    return out
+   
     df_f[c] = pd.to_numeric(df_f[c], errors="coerce")
 df_f = df_f.dropna(subset=FEATURES)
 for feat in FEATURES:
     df_f[f"{feat} Percentile"] = df_f.groupby("League")[feat].transform(lambda x: x.rank(pct=True) * 100.0)
+role_scores = player_role_scores_from_row(
+    player_row.iloc[0],
+    use_weight=use_player_league_weight,
+    beta=beta_player
+)
+
 
 # ----------------- ROLE SCORING (tables) -----------------
 def compute_weighted_role_score(df_in: pd.DataFrame, metrics: dict, beta: float, league_weighting: bool) -> pd.Series:
