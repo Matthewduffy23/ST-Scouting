@@ -339,7 +339,7 @@ st.caption("Percentiles & chart computed against the pool below (defaults to the
 with st.container():
     c1, c2, c3 = st.columns([2,1,1])
     leagues_pool = c1.multiselect("Comparison leagues", sorted(df["League"].dropna().unique()), default=default_league_for_pool)
-    min_minutes_pool, max_minutes_pool = c2.slider("Pool minutes", 0, 5000, (500, 5000))
+    min_minutes_pool, max_minutes_pool = c2.slider("Pool minutes", 0, 5000, (1000, 5000))
     age_min_pool, age_max_pool = c3.slider("Pool age", 14, 45, (16, 40))  # default 16–40
     same_pos = st.checkbox("Limit pool to current position prefix", value=True)
 
