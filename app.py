@@ -750,35 +750,48 @@ if radar_metrics:
 st.markdown("---")
 st.header("🧭 Similar players (within adjustable pool)")
 with st.expander("Similarity settings", expanded=False):
-    # leagues for candidates = the same main selection by default
-    sim_leagues = st.multiselect(
-        "Candidate leagues",
-        sorted(set(INCLUDED_LEAGUES) | set(df["League"].dropna().unique())),
-        default=leagues_sel,
-        key="sim_leagues"
+    # options = all known leagues
+    candidate_league_options = sorted(set(INCLUDED_LEAGUES) | set(df["League"].dropna().unique()))
+
+    # NEW: presets for candidate leagues (uses your _PRESETS_CF created above)
+    sim_preset = st.selectbox(
+        "Candidate league preset",
+        list(_PRESETS_CF.keys()),
+        index=list(_PRESETS_CF.keys()).index("All listed leagues") if "All listed leagues" in _PRESETS_CF else 0,
+        key="sim_preset"
     )
-    # NEW: similar league toggle + window
-    use_similar_leagues = st.toggle(
-        "Limit candidate leagues to 'similar' to the target league",
-        value=False,
-        key="sim_use_similar",
-        help="Filters the candidate pool to leagues with similar difficulty "
-             "based on LEAGUE_STRENGTHS."
-    )
-    sim_league_window = st.slider(
-        "Similar league window (±)",
-        0.0, 0.5, 0.10, 0.01,
-        key="sim_league_window",
-        disabled=not use_similar_leagues,
-        help="Max allowed absolute difference in LEAGUE_STRENGTHS between a candidate "
-             "league and the target league."
-    )
+
+    if sim_preset != "Custom":
+        preset_vals = _PRESETS_CF.get(sim_preset) or []
+        # keep only leagues present in data/options
+        preset_vals = sorted([lg for lg in preset_vals if lg in candidate_league_options])
+        default_leagues = preset_vals if preset_vals else leagues_sel
+        sim_leagues = st.multiselect(
+            "Candidate leagues",
+            candidate_league_options,
+            default=default_leagues,
+            key="sim_leagues",
+            disabled=bool(preset_vals)  # lock if preset provides leagues
+        )
+        if preset_vals:
+            st.caption(f"Preset: {sim_preset} ({len(preset_vals)} league(s))")
+        else:
+            st.warning("Selected preset has no leagues configured; edit manually or define PRESET_LEAGUES.")
+    else:
+        # fully manual selection
+        sim_leagues = st.multiselect(
+            "Candidate leagues",
+            candidate_league_options,
+            default=leagues_sel,
+            key="sim_leagues",
+        )
 
     sim_min_minutes, sim_max_minutes = st.slider("Minutes played (candidates)", 0, 5000, (500, 5000), key="sim_min")
     sim_min_age, sim_max_age = st.slider("Age (candidates)", 14, 45, (16, 33), key="sim_age")
     percentile_weight = st.slider("Percentile weight", 0.0, 1.0, 0.7, 0.05, key="sim_pw")
     league_weight_sim = st.slider("League weight (difficulty adj.)", 0.0, 1.0, 0.2, 0.05, key="sim_lw")
     top_n_sim = st.number_input("Show top N", min_value=5, max_value=200, value=50, step=5, key="sim_top")
+
 
 # similarity computation (light version: uses a fixed feature basket)
 SIM_FEATURES = [
