@@ -749,40 +749,57 @@ if radar_metrics:
 # ----------------- (B) SIMILAR PLAYERS (adjustable pool) -----------------
 st.markdown("---")
 st.header("🧭 Similar players (within adjustable pool)")
-with st.expander("Similarity settings", expanded=False):
-    # options = all known leagues
-    candidate_league_options = sorted(set(INCLUDED_LEAGUES) | set(df["League"].dropna().unique()))
 
-    # NEW: presets for candidate leagues (uses your _PRESETS_CF created above)
+# --- Build local presets safely (no reliance on _PRESETS_CF existing) ---
+_leagues_from_df = df['League'].dropna().unique().tolist() if 'League' in df.columns else []
+_included_from_global = list(globals().get('INCLUDED_LEAGUES', []))
+_included_leagues_cf = sorted(set(_included_from_global) | set(_leagues_from_df))
+
+_PRESET_LEAGUES_SAFE = globals().get('PRESET_LEAGUES', {})  # may be missing; that's ok
+
+_PRESETS_SIM = {
+    "All listed leagues": _included_leagues_cf,
+    "T5":  sorted(list(_PRESET_LEAGUES_SAFE.get("Top 5 Europe", []))),
+    "T20": sorted(list(_PRESET_LEAGUES_SAFE.get("Top 20 Europe", []))),
+    "EFL": sorted(list(_PRESET_LEAGUES_SAFE.get("EFL (England 2–4)", []))),
+    "Custom": None,
+}
+# ------------------------------------------------------------------------
+
+with st.expander("Similarity settings", expanded=False):
+    candidate_league_options = _included_leagues_cf
+    default_sel = leagues_sel if 'leagues_sel' in globals() else _included_leagues_cf
+
+    sim_preset_choices = list(_PRESETS_SIM.keys())
     sim_preset = st.selectbox(
         "Candidate league preset",
-        list(_PRESETS_CF.keys()),
-        index=list(_PRESETS_CF.keys()).index("All listed leagues") if "All listed leagues" in _PRESETS_CF else 0,
+        sim_preset_choices,
+        index=sim_preset_choices.index("All listed leagues"),
         key="sim_preset"
     )
 
     if sim_preset != "Custom":
-        preset_vals = _PRESETS_CF.get(sim_preset) or []
-        # keep only leagues present in data/options
+        preset_vals = _PRESETS_SIM.get(sim_preset) or []
+        # keep only leagues that are actually present
         preset_vals = sorted([lg for lg in preset_vals if lg in candidate_league_options])
-        default_leagues = preset_vals if preset_vals else leagues_sel
+
+        # If preset has values, lock the multiselect; otherwise allow manual edits
         sim_leagues = st.multiselect(
             "Candidate leagues",
             candidate_league_options,
-            default=default_leagues,
+            default=(preset_vals if preset_vals else default_sel),
             key="sim_leagues",
-            disabled=bool(preset_vals)  # lock if preset provides leagues
+            disabled=bool(preset_vals)
         )
         if preset_vals:
-            st.caption(f"Preset: {sim_preset} ({len(preset_vals)} league(s))")
+            st.caption(f"Preset: {sim_preset} — {len(preset_vals)} league(s)")
         else:
-            st.warning("Selected preset has no leagues configured; edit manually or define PRESET_LEAGUES.")
+            st.warning("This preset has no leagues configured. Edit manually or define PRESET_LEAGUES.")
     else:
-        # fully manual selection
         sim_leagues = st.multiselect(
             "Candidate leagues",
             candidate_league_options,
-            default=leagues_sel,
+            default=default_sel,
             key="sim_leagues",
         )
 
@@ -792,12 +809,11 @@ with st.expander("Similarity settings", expanded=False):
     league_weight_sim = st.slider("League weight (difficulty adj.)", 0.0, 1.0, 0.2, 0.05, key="sim_lw")
     top_n_sim = st.number_input("Show top N", min_value=5, max_value=200, value=50, step=5, key="sim_top")
 
-
 # similarity computation (light version: uses a fixed feature basket)
 SIM_FEATURES = [
     'Defensive duels per 90', 'Aerial duels per 90', 'Aerial duels won, %',
     'Non-penalty goals per 90', 'xG per 90', 'Shots per 90',
-    'Crosses per 90',  'Dribbles per 90', 'Successful dribbles, %',
+    'Crosses per 90', 'Dribbles per 90', 'Successful dribbles, %',
     'Touches in box per 90', 'Progressive runs per 90',
     'Passes per 90', 'Accurate passes, %', 'xA per 90', 'Smart passes per 90',
     'Passes to penalty area per 90', 'Deep completions per 90'
@@ -807,35 +823,7 @@ if not player_row.empty:
     target_row_full = df[df['Player'] == player_name].head(1).iloc[0]
     target_league = target_row_full['League']
 
-    # --- NEW: build effective candidate leagues with 'similar league' toggle ---
-    sim_leagues_effective = sim_leagues
-    if use_similar_leagues:
-        tgt_ls = LEAGUE_STRENGTHS.get(target_league, None)
-        if tgt_ls is not None:
-            # leagues within ± window of target league strength
-            similar_leagues_auto = [
-                lg for lg, ls in LEAGUE_STRENGTHS.items()
-                if abs(ls - tgt_ls) <= sim_league_window
-            ]
-            # only keep leagues that actually exist in df
-            similar_leagues_auto = sorted(set(similar_leagues_auto) & set(df['League'].dropna().unique()))
-            # intersect with manual selection; if empty, fall back to auto list
-            intersection = sorted(set(sim_leagues) & set(similar_leagues_auto))
-            sim_leagues_effective = intersection if intersection else similar_leagues_auto
-
-            # small UI hint for transparency
-            if len(sim_leagues_effective) == 0:
-                st.info("No leagues match the chosen similarity window; using target league only.")
-                sim_leagues_effective = [target_league]
-            else:
-                st.caption(f"Using {len(sim_leagues_effective)} similar league(s): {', '.join(sim_leagues_effective)}")
-        else:
-            # if the target league is missing from the strength table, fall back gracefully
-            st.warning("Target league not found in LEAGUE_STRENGTHS; falling back to selected leagues.")
-            sim_leagues_effective = sim_leagues
-    # --------------------------------------------------------------------------
-
-    df_candidates = df[df['League'].isin(sim_leagues_effective)].copy()
+    df_candidates = df[df['League'].isin(sim_leagues)].copy()
     df_candidates = df_candidates[(df_candidates['Minutes played'].between(sim_min_minutes, sim_max_minutes)) &
                                   (df_candidates['Age'].between(sim_min_age, sim_max_age))]
     df_candidates = df_candidates.dropna(subset=SIM_FEATURES)
