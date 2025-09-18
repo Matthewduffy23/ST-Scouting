@@ -913,13 +913,19 @@ if not player_row.empty:
 
         out = df_candidates[['Player','Team','League','Age','Minutes played','Market value']].copy()
         out['League strength'] = out['League'].map(LS_MAP).fillna(0.0) if LS_MAP else 0.0
-        tgt_ls = LS_MAP.get(target_league, 1.0) if LS_MAP else 1.0
-        league_ratio = (out['League strength'] / tgt_ls).clip(lower=0.5, upper=1.0) if LS_MAP else 1.0
+tgt_ls = float(LS_MAP.get(target_league, 1.0)) if LS_MAP else 1.0
 
-        out['Similarity'] = similarities
-        out['Adjusted Similarity'] = (
-            out['Similarity'] * (1 - league_weight_sim) + out['Similarity'] * league_ratio * league_weight_sim
-        ) if apply_league_adjust else out['Similarity']
+# Symmetric, always ≤ 1: penalize differences in either direction (stronger or weaker)
+eps = 1e-6
+cand_ls = np.maximum(out['League strength'].astype(float), eps)
+tgt_ls_safe = max(tgt_ls, eps)
+league_ratio = np.minimum(cand_ls / tgt_ls_safe, tgt_ls_safe / cand_ls)
+
+out['Similarity'] = similarities
+out['Adjusted Similarity'] = (
+    out['Similarity'] * ((1 - league_weight_sim) + league_weight_sim * league_ratio)
+) if apply_league_adjust else out['Similarity']
+
 
         out = out.sort_values('Adjusted Similarity', ascending=False).reset_index(drop=True)
         out.insert(0, 'Rank', np.arange(1, len(out) + 1))
