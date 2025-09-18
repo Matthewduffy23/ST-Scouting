@@ -791,39 +791,6 @@ _PRESETS_SIM = {
 }
 # ------------------------------------------------------------------------
 
-def distances_to_similarity(arr: np.ndarray, mode: str) -> np.ndarray:
-    """Map distances to 0..100 similarity using different scalings."""
-    arr = np.asarray(arr, dtype=float).ravel()
-    if arr.size == 0:
-        return arr
-
-    if mode == "Min–max (current)":
-        rng = np.ptp(arr)
-        norm = (arr - arr.min()) / (rng if rng != 0 else 1.0)
-        sim = (1.0 - norm) * 100.0
-
-    elif mode == "Gaussian-CDF (z-score)":
-        mu = float(arr.mean())
-        sd = float(arr.std())
-        z = (arr - mu) / (sd if sd > 0 else 1.0)
-        # normal CDF via erf, vectorized (no SciPy)
-        erf_vals = np.vectorize(math.erf)(z / np.sqrt(2.0))
-        cdf = 0.5 * (1.0 + erf_vals)
-        # higher similarity = smaller distance (upper-tail)
-        sim = (1.0 - cdf) * 100.0
-
-    else:  # "Robust (Q10–Q90)"
-        q10, q90 = np.percentile(arr, [10, 90])
-        denom = (q90 - q10)
-        if denom <= 0:
-            rng = np.ptp(arr)
-            norm = (arr - arr.min()) / (rng if rng != 0 else 1.0)
-        else:
-            norm = np.clip((arr - q10) / denom, 0, 1)
-        sim = (1.0 - norm) * 100.0
-
-    return np.round(sim, 2)
-
 with st.expander("Similarity settings", expanded=False):
     candidate_league_options = _included_leagues_cf
     default_sel = leagues_sel if 'leagues_sel' in globals() else _included_leagues_cf
@@ -838,10 +805,7 @@ with st.expander("Similarity settings", expanded=False):
 
     if sim_preset != "Custom":
         preset_vals = _PRESETS_SIM.get(sim_preset) or []
-        # keep only leagues that are actually present
         preset_vals = sorted([lg for lg in preset_vals if lg in candidate_league_options])
-
-        # If preset has values, lock the multiselect; otherwise allow manual edits
         sim_leagues = st.multiselect(
             "Candidate leagues",
             candidate_league_options,
@@ -865,15 +829,15 @@ with st.expander("Similarity settings", expanded=False):
     sim_min_minutes, sim_max_minutes = st.slider("Minutes played (candidates)", 0, 5000, (500, 5000), key="sim_min")
     sim_min_age, sim_max_age = st.slider("Age (candidates)", 14, 45, (16, 33), key="sim_age")
 
-    # Optional league quality filter (0–101), applied to candidate pool pre-computation
+    # Optional league quality filter (0–101), applied pre-computation
     use_strength_filter = st.toggle("Filter by league quality (0–101)", value=False, key="sim_use_strength")
     if use_strength_filter:
         sim_min_strength, sim_max_strength = st.slider("League quality (strength)", 0, 101, (0, 101), key="sim_strength")
 
-    # Percentile vs actual value blend
+    # Blend between percentile distance and actual-value distance
     percentile_weight = st.slider("Percentile weight", 0.0, 1.0, 0.7, 0.05, key="sim_pw")
 
-    # Toggleable league difficulty adjustment
+    # Toggleable league difficulty adjustment (default on)
     apply_league_adjust = st.toggle("Apply league difficulty adjustment", value=True, key="sim_apply_ladj")
     league_weight_sim = st.slider(
         "League weight (difficulty adj.)",
@@ -882,19 +846,12 @@ with st.expander("Similarity settings", expanded=False):
         disabled=not apply_league_adjust
     )
 
-    # New: distance-to-similarity scaling mode
-    scale_mode = st.selectbox(
-        "Similarity scaling",
-        ["Robust (Q10–Q90)", "Min–max (current)", "Gaussian-CDF (z-score)"],
-        index=0, key="sim_scale",
-        help="How distances are mapped to 0–100 similarity."
-    )
-
     # Always-available advanced weights (no toggle)
     with st.expander("Advanced feature weights (1–5)", expanded=False):
         adv_weights = {}
         for f in SIM_FEATURES:
             key = "simw_" + f.replace(" ", "_").replace("%", "pct").replace(",", "").replace(".", "_")
+            # keep previous choice if present
             default_val = int(st.session_state.get(key, DEFAULT_SIM_WEIGHTS.get(f, 1)))
             adv_weights[f] = st.slider(f"Weight — {f}", 1, 5, default_val, key=key)
 
@@ -907,7 +864,7 @@ if not player_row.empty:
 
     df_candidates = df[df['League'].isin(sim_leagues)].copy()
 
-    # optional league strength filter before computing similarities
+    # optional league strength filter
     if use_strength_filter and LS_MAP:
         df_candidates['League strength'] = df_candidates['League'].map(LS_MAP).fillna(0.0)
         df_candidates = df_candidates[
@@ -941,8 +898,11 @@ if not player_row.empty:
         actual_value_distances = np.linalg.norm((standardized_features - target_features_standardized) * weights_vec, axis=1)
         combined = percentile_distances * percentile_weight + actual_value_distances * (1.0 - percentile_weight)
 
-        # map distances to similarity 0..100 using selected scaling
-        similarities = distances_to_similarity(combined, scale_mode)
+        # robust normalization -> similarity 0..100
+        arr = np.asarray(combined, dtype=float).ravel()
+        rng = np.ptp(arr)
+        norm = (arr - arr.min()) / (rng if rng != 0 else 1.0)
+        similarities = ((1.0 - norm) * 100.0).round(2)
 
         out = df_candidates[['Player','Team','League','Age','Minutes played','Market value']].copy()
         out['League strength'] = out['League'].map(LS_MAP).fillna(0.0) if LS_MAP else 0.0
