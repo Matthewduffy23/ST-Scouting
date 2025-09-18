@@ -751,8 +751,29 @@ st.markdown("---")
 st.header("🧭 Similar players (within adjustable pool)")
 with st.expander("Similarity settings", expanded=False):
     # leagues for candidates = the same main selection by default
-    sim_leagues = st.multiselect("Candidate leagues", sorted(set(INCLUDED_LEAGUES) | set(df["League"].dropna().unique())),
-                                 default=leagues_sel, key="sim_leagues")
+    sim_leagues = st.multiselect(
+        "Candidate leagues",
+        sorted(set(INCLUDED_LEAGUES) | set(df["League"].dropna().unique())),
+        default=leagues_sel,
+        key="sim_leagues"
+    )
+    # NEW: similar league toggle + window
+    use_similar_leagues = st.toggle(
+        "Limit candidate leagues to 'similar' to the target league",
+        value=False,
+        key="sim_use_similar",
+        help="Filters the candidate pool to leagues with similar difficulty "
+             "based on LEAGUE_STRENGTHS."
+    )
+    sim_league_window = st.slider(
+        "Similar league window (±)",
+        0.0, 0.5, 0.10, 0.01,
+        key="sim_league_window",
+        disabled=not use_similar_leagues,
+        help="Max allowed absolute difference in LEAGUE_STRENGTHS between a candidate "
+             "league and the target league."
+    )
+
     sim_min_minutes, sim_max_minutes = st.slider("Minutes played (candidates)", 0, 5000, (500, 5000), key="sim_min")
     sim_min_age, sim_max_age = st.slider("Age (candidates)", 14, 45, (16, 33), key="sim_age")
     percentile_weight = st.slider("Percentile weight", 0.0, 1.0, 0.7, 0.05, key="sim_pw")
@@ -768,19 +789,51 @@ SIM_FEATURES = [
     'Passes per 90', 'Accurate passes, %', 'xA per 90', 'Smart passes per 90',
     'Passes to penalty area per 90', 'Deep completions per 90'
 ]
+
 if not player_row.empty:
     target_row_full = df[df['Player'] == player_name].head(1).iloc[0]
     target_league = target_row_full['League']
-    df_candidates = df[df['League'].isin(sim_leagues)].copy()
+
+    # --- NEW: build effective candidate leagues with 'similar league' toggle ---
+    sim_leagues_effective = sim_leagues
+    if use_similar_leagues:
+        tgt_ls = LEAGUE_STRENGTHS.get(target_league, None)
+        if tgt_ls is not None:
+            # leagues within ± window of target league strength
+            similar_leagues_auto = [
+                lg for lg, ls in LEAGUE_STRENGTHS.items()
+                if abs(ls - tgt_ls) <= sim_league_window
+            ]
+            # only keep leagues that actually exist in df
+            similar_leagues_auto = sorted(set(similar_leagues_auto) & set(df['League'].dropna().unique()))
+            # intersect with manual selection; if empty, fall back to auto list
+            intersection = sorted(set(sim_leagues) & set(similar_leagues_auto))
+            sim_leagues_effective = intersection if intersection else similar_leagues_auto
+
+            # small UI hint for transparency
+            if len(sim_leagues_effective) == 0:
+                st.info("No leagues match the chosen similarity window; using target league only.")
+                sim_leagues_effective = [target_league]
+            else:
+                st.caption(f"Using {len(sim_leagues_effective)} similar league(s): {', '.join(sim_leagues_effective)}")
+        else:
+            # if the target league is missing from the strength table, fall back gracefully
+            st.warning("Target league not found in LEAGUE_STRENGTHS; falling back to selected leagues.")
+            sim_leagues_effective = sim_leagues
+    # --------------------------------------------------------------------------
+
+    df_candidates = df[df['League'].isin(sim_leagues_effective)].copy()
     df_candidates = df_candidates[(df_candidates['Minutes played'].between(sim_min_minutes, sim_max_minutes)) &
                                   (df_candidates['Age'].between(sim_min_age, sim_max_age))]
     df_candidates = df_candidates.dropna(subset=SIM_FEATURES)
     df_candidates = df_candidates[df_candidates['Player'] != player_name]
+
     if not df_candidates.empty:
         # percentile ranks within candidate pool (per-league for robustness)
         percl = df_candidates.groupby('League')[SIM_FEATURES].rank(pct=True)
         # target percentiles computed on df global per-league
         target_percentiles = df.groupby('League')[SIM_FEATURES].rank(pct=True).loc[df['Player'] == player_name]
+
         # standardize on candidate pool
         scaler = StandardScaler()
         standardized_features = scaler.fit_transform(df_candidates[SIM_FEATURES])
@@ -813,6 +866,7 @@ if not player_row.empty:
         st.info("No candidates after similarity filters.")
 else:
     st.caption("Pick a player to see similar players.")
+
 
 # ---------------------------- (C) CLUB FIT — self-contained block ----------------------------
 st.markdown("---")
