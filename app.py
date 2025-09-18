@@ -851,7 +851,6 @@ with st.expander("Similarity settings", expanded=False):
         adv_weights = {}
         for f in SIM_FEATURES:
             key = "simw_" + f.replace(" ", "_").replace("%", "pct").replace(",", "").replace(".", "_")
-            # keep previous choice if present
             default_val = int(st.session_state.get(key, DEFAULT_SIM_WEIGHTS.get(f, 1)))
             adv_weights[f] = st.slider(f"Weight — {f}", 1, 5, default_val, key=key)
 
@@ -898,7 +897,7 @@ if not player_row.empty:
         actual_value_distances = np.linalg.norm((standardized_features - target_features_standardized) * weights_vec, axis=1)
         combined = percentile_distances * percentile_weight + actual_value_distances * (1.0 - percentile_weight)
 
-        # robust normalization -> similarity 0..100
+        # normalize -> similarity 0..100 (keep your current min–max)
         arr = np.asarray(combined, dtype=float).ravel()
         rng = np.ptp(arr)
         norm = (arr - arr.min()) / (rng if rng != 0 else 1.0)
@@ -916,8 +915,36 @@ if not player_row.empty:
 
         out = out.sort_values('Adjusted Similarity', ascending=False).reset_index(drop=True)
         out.insert(0, 'Rank', np.arange(1, len(out) + 1))
+
+        # ---------- Display tweaks ----------
+        # 1) Hide raw 'Similarity' in the table
+        cols_to_show = ['Rank', 'Player', 'Team', 'League', 'Age', 'Minutes played',
+                        'Market value', 'League strength', 'Adjusted Similarity']
+        cols_to_show = [c for c in cols_to_show if c in out.columns]
+        df_show = out[cols_to_show].head(int(top_n_sim))
+
+        # 2) Row coloring by rank bands (Top 5, next 5, next 5, next 5)
+        def _band_style(df_in: pd.DataFrame) -> pd.DataFrame:
+            styles = pd.DataFrame('', index=df_in.index, columns=df_in.columns)
+            for i, r in enumerate(df_in['Rank']):
+                if r <= 5:
+                    styles.iloc[i, :] = 'background-color: #1b5e20; color: white'   # dark green
+                elif r <= 10:
+                    styles.iloc[i, :] = 'background-color: #2e7d32; color: white'  # medium green
+                elif r <= 15:
+                    styles.iloc[i, :] = 'background-color: #a5d6a7; color: black'  # light green
+                elif r <= 20:
+                    styles.iloc[i, :] = 'background-color: #fff59d; color: black'  # yellow
+            return styles
+
         st.caption(f"Candidates after filters: {len(out):,}")
-        st.dataframe(out.head(int(top_n_sim)), use_container_width=True)
+        try:
+            st.dataframe(df_show.style.apply(_band_style, axis=None), use_container_width=True)
+        except Exception:
+            # fallback without styling if environment doesn't support Styler
+            st.dataframe(df_show, use_container_width=True)
+        # -----------------------------------
+
     else:
         st.info("No candidates after similarity filters.")
 else:
