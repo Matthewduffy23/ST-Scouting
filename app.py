@@ -872,6 +872,13 @@ if not player_row.empty:
             (df_candidates['League strength'] <= float(sim_max_strength))
         ]
 
+    # --- enforce CF-only (no toggle) ---
+    if 'Position' in df_candidates.columns:
+        df_candidates = df_candidates[df_candidates['Position'].astype(str).str.startswith('CF')]
+    else:
+        st.warning("No 'Position' column found; cannot filter to CF.")
+    # -----------------------------------
+
     # base filters
     df_candidates = df_candidates[
         df_candidates['Minutes played'].between(sim_min_minutes, sim_max_minutes) &
@@ -922,8 +929,6 @@ if not player_row.empty:
         st.info("No candidates after similarity filters.")
 else:
     st.caption("Pick a player to see similar players.")
-
-
 
 
 # ---------------------------- (C) CLUB FIT — self-contained block ----------------------------
