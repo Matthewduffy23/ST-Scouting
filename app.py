@@ -34,8 +34,8 @@ except Exception:
             self.fit(X); return self.transform(X)
 
 # ----------------- PAGE -----------------
-st.set_page_config(page_title="Advanced Scouting Suite", layout="wide")
-st.title("🔎 Advanced Scouting Suite")
+st.set_page_config(page_title="Advanced ST Scouting System", layout="wide")
+st.title("🔎 Advanced ST Scouting System")
 
 # ----------------- CONFIG -----------------
 INCLUDED_LEAGUES = [
@@ -152,8 +152,8 @@ df = load_df()
 with st.sidebar:
     st.header("Filters")
     c1, c2, c3 = st.columns([1,1,1])
-    use_top5  = c1.checkbox("Top-5", value=False)
-    use_top20 = c2.checkbox("Top-20", value=False)
+    use_top5  = c1.checkbox("Top-5 EU", value=False)
+    use_top20 = c2.checkbox("Top-20 EU", value=False)
     use_efl   = c3.checkbox("EFL", value=False)
 
     seed = set()
@@ -168,10 +168,10 @@ with st.sidebar:
     # numeric coercions
     df["Minutes played"] = pd.to_numeric(df["Minutes played"], errors="coerce")
     df["Age"] = pd.to_numeric(df["Age"], errors="coerce")
-    min_minutes, max_minutes = st.slider("Minutes played", 0, 5000, (500, 5000))
+    min_minutes, max_minutes = st.slider("Minutes played", 0, 5000, (1000, 5000))
     age_min_data = int(np.nanmin(df["Age"])) if df["Age"].notna().any() else 14
     age_max_data = int(np.nanmax(df["Age"])) if df["Age"].notna().any() else 45
-    min_age, max_age = st.slider("Age", age_min_data, age_max_data, (16, 33))
+    min_age, max_age = st.slider("Age", age_min_data, age_max_data, (16, 40))
 
     pos_text = st.text_input("Position startswith", "CF")
 
@@ -473,19 +473,18 @@ else:
         'Shots per 90': {'style':'Takes many shots','sw':'Shot Volume'},
         'Goal conversion, %': {'style':None,'sw':'Finishing'},
         'Crosses per 90': {'style':'Moves into wide areas to create','sw':'Crossing Volume'},
-        'Accurate crosses, %': {'style':None,'sw':'Crossing Accuracy'},
         'Dribbles per 90': {'style':'1v1 dribbler','sw':'Dribble Volume'},
         'Successful dribbles, %': {'style':None,'sw':'Dribbling Efficiency'},
         'Touches in box per 90': {'style':'Busy in the box','sw':'Penalty-box Coverage'},
         'Progressive runs per 90': {'style':'Gets team up the pitch via carries','sw':'Progressive Runs'},
-        'Passes per 90': {'style':'High build-up involvement','sw':'Build-up Volume'},
+        'Passes per 90': {'style':'Involved in build-up','sw':'Involvement'},
         'Accurate passes, %': {'style':None,'sw':'Retention'},
         'xA per 90': {'style':'Creates goal scoring chances','sw':'Chance Creation'},
         'Passes to penalty area per 90': {'style':None,'sw':'Passes to Penalty Area'},
-        'Deep completions per 90': {'style':None,'sw':'Deep Completions'},
-        'Smart passes per 90': {'style':None,'sw':'Smart Passes'},
+        'Deep completions per 90': {'style':'Gets ball into the box','sw':None},
+        'Smart passes per 90': {'style':'Attempts through balls','sw': None},
     }
-    HI, LO, STYLE_T = 75, 25, 65
+    HI, LO, STYLE_T = 75, 30, 65
 
     def percentile_in_series(value, series: pd.Series) -> float:
         s = pd.to_numeric(series, errors="coerce").dropna()
@@ -547,7 +546,7 @@ else:
     st.markdown(chips(styles, "#bfdbfe"), unsafe_allow_html=True)   # light blue
     st.markdown("**Strengths:**")
     st.markdown(chips(strengths, "#a7f3d0"), unsafe_allow_html=True)  # light green
-    st.markdown("**Weaknesses / growth areas:**")
+    st.markdown("**Weaknesses:**")
     st.markdown(chips(weaknesses, "#fecaca"), unsafe_allow_html=True) # light red
 
     # ---------- 3) ROLE SCORES (MATCH TABLES EXACTLY) ----------
@@ -766,13 +765,13 @@ LS_MAP = globals().get('LEAGUE_STRENGTHS', globals().get('league_strengths', {})
 # defaults for advanced weights (others default to 1)
 DEFAULT_SIM_WEIGHTS = {f: 1 for f in SIM_FEATURES}
 DEFAULT_SIM_WEIGHTS.update({
-    'Passes per 90': 3,
-    'Dribbles per 90': 3,
-    'Non-penalty goals per 90': 3,
-    'Aerial duels per 90': 3,
+    'Passes per 90': 2,
+    'Dribbles per 90': 2,
+    'Non-penalty goals per 90': 2,
+    'Aerial duels per 90': 2,
     'Aerial duels won, %': 2,
     'xA per 90': 2,
-    'xG per 90': 3,
+    'xG per 90': 2,
     'Touches in box per 90': 2,
 })
 
@@ -826,8 +825,8 @@ with st.expander("Similarity settings", expanded=False):
         )
 
     # Base filters
-    sim_min_minutes, sim_max_minutes = st.slider("Minutes played (candidates)", 0, 5000, (500, 5000), key="sim_min")
-    sim_min_age, sim_max_age = st.slider("Age (candidates)", 14, 45, (16, 33), key="sim_age")
+    sim_min_minutes, sim_max_minutes = st.slider("Minutes played (candidates)", 0, 5000, (1000, 5000), key="sim_min")
+    sim_min_age, sim_max_age = st.slider("Age (candidates)", 14, 45, (16, 40), key="sim_age")
 
     # Optional league quality filter (0–101), applied pre-computation
     use_strength_filter = st.toggle("Filter by league quality (0–101)", value=False, key="sim_use_strength")
@@ -993,10 +992,10 @@ DEFAULT_MARKET_WEIGHT = 0.2
 # features (fixed)
 CF_FEATURES = [
     'Defensive duels per 90','Aerial duels per 90','Aerial duels won, %','PAdj Interceptions',
-    'Non-penalty goals per 90','xG per 90','Shots per 90','Shots on target, %','Goal conversion, %',
+    'Non-penalty goals per 90','xG per 90','Shots per 90','Shots on target, %',
     'Crosses per 90','Accurate crosses, %','Dribbles per 90','Successful dribbles, %',
     'Offensive duels per 90','Touches in box per 90','Progressive runs per 90','Accelerations per 90',
-    'Passes per 90','Accurate passes, %','xA per 90','Smart passes per 90','Key passes per 90',
+    'Passes per 90','Accurate passes, %','xA per 90','Smart passes per 90',
     'Passes to final third per 90','Passes to penalty area per 90','Accurate passes to penalty area, %',
     'Deep completions per 90'
 ]
