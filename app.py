@@ -607,7 +607,7 @@ with st.expander("Radar settings", expanded=False):
     pos_scope = st.text_input("Position startswith (radar pool)", default_pos_prefix, key="rad_pos")
     df["Minutes played"] = pd.to_numeric(df["Minutes played"], errors="coerce")
     df["Age"]            = pd.to_numeric(df["Age"], errors="coerce")
-    min_minutes_r, max_minutes_r = st.slider("Minutes filter (radar pool)", 0, 5000, (500, 5000), key="rad_min")
+    min_minutes_r, max_minutes_r = st.slider("Minutes filter (radar pool)", 0, 5000, (1000, 5000), key="rad_min")
     # default age 16–40 (changed from 16–33)
     age_min_r_bound = int(np.nanmin(df["Age"])) if df["Age"].notna().any() else 14
     age_max_r_bound = int(np.nanmax(df["Age"])) if df["Age"].notna().any() else 45
@@ -986,7 +986,7 @@ else:
     _LS_CF = {lg: 50.0 for lg in _included_leagues_cf}
 
 # weight dials
-DEFAULT_LEAGUE_WEIGHT = 0.4
+DEFAULT_LEAGUE_WEIGHT = 0.5
 DEFAULT_MARKET_WEIGHT = 0.2
 
 # features (fixed)
