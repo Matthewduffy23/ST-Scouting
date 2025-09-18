@@ -750,6 +750,10 @@ if radar_metrics:
 st.markdown("---")
 st.header("🧭 Similar players (within adjustable pool)")
 
+# extra imports needed for 9/10 upgrade
+from sklearn.covariance import LedoitWolf
+from sklearn.cluster import KMeans
+
 # --- Feature basket declared FIRST so UI can use it ---
 SIM_FEATURES = [
     'Defensive duels per 90', 'Aerial duels per 90', 'Aerial duels won, %',
@@ -790,6 +794,37 @@ _PRESETS_SIM = {
     "Custom": None,
 }
 # ------------------------------------------------------------------------
+
+def distances_to_similarity(arr: np.ndarray, mode: str) -> np.ndarray:
+    """Map distances to 0..100 similarity using different scalings."""
+    arr = np.asarray(arr, dtype=float).ravel()
+    if arr.size == 0:
+        return arr
+
+    if mode == "Min–max (current)":
+        rng = np.ptp(arr)
+        norm = (arr - arr.min()) / (rng if rng != 0 else 1.0)
+        sim = (1.0 - norm) * 100.0
+
+    elif mode == "Gaussian-CDF (z-score)":
+        mu = float(arr.mean())
+        sd = float(arr.std())
+        z = (arr - mu) / (sd if sd > 0 else 1.0)
+        # normal CDF via erf (no SciPy)
+        cdf = 0.5 * (1.0 + np.vectorize(math.erf)(z / np.sqrt(2.0)))
+        sim = (1.0 - cdf) * 100.0  # higher sim = smaller distance
+
+    else:  # "Robust (Q10–Q90)"
+        q10, q90 = np.percentile(arr, [10, 90])
+        denom = (q90 - q10)
+        if denom <= 0:
+            rng = np.ptp(arr)
+            norm = (arr - arr.min()) / (rng if rng != 0 else 1.0)
+        else:
+            norm = np.clip((arr - q10) / denom, 0, 1)
+        sim = (1.0 - norm) * 100.0
+
+    return np.round(sim, 2)
 
 with st.expander("Similarity settings", expanded=False):
     candidate_league_options = _included_leagues_cf
@@ -846,12 +881,24 @@ with st.expander("Similarity settings", expanded=False):
         disabled=not apply_league_adjust
     )
 
-    # Always-available advanced weights (no toggle)
+    # Role-archetype clustering
+    use_role_cluster = st.toggle("Match role archetype (cluster-based)", value=True, key="sim_use_role_cluster",
+                                 help="Restrict candidates to the target's archetype learned from the pool.")
+    k_clusters = st.slider("Number of archetypes (K)", 2, 12, 6, key="sim_k") if use_role_cluster else 6
+
+    # Similarity scaling mode
+    scale_mode = st.selectbox(
+        "Similarity scaling",
+        ["Robust (Q10–Q90)", "Min–max (current)", "Gaussian-CDF (z-score)"],
+        index=0, key="sim_scale",
+        help="How distances are mapped to 0–100 similarity."
+    )
+
+    # Always-available advanced weights (no toggle) — LINEAR effect via sqrt trick
     with st.expander("Advanced feature weights (1–5)", expanded=False):
         adv_weights = {}
         for f in SIM_FEATURES:
             key = "simw_" + f.replace(" ", "_").replace("%", "pct").replace(",", "").replace(".", "_")
-            # keep previous choice if present
             default_val = int(st.session_state.get(key, DEFAULT_SIM_WEIGHTS.get(f, 1)))
             adv_weights[f] = st.slider(f"Weight — {f}", 1, 5, default_val, key=key)
 
@@ -878,31 +925,65 @@ if not player_row.empty:
         df_candidates['Age'].between(sim_min_age, sim_max_age)
     ]
     df_candidates = df_candidates.dropna(subset=SIM_FEATURES)
+
+    # remove target from candidates (if present)
     df_candidates = df_candidates[df_candidates['Player'] != player_name]
 
     if not df_candidates.empty:
-        # percentile ranks within candidate pool (per-league for robustness)
+        # ---------- Role-archetype clustering (optional) ----------
+        # Standardize once for clustering & distances
+        scaler = StandardScaler()
+        X = scaler.fit_transform(df_candidates[SIM_FEATURES].values)
+        x_tgt = scaler.transform([target_row_full[SIM_FEATURES].values])[0]
+
+        # cluster on standardized features (independent of your per-metric weights)
+        if use_role_cluster and len(df_candidates) >= k_clusters:
+            try:
+                km = KMeans(n_clusters=int(k_clusters), n_init='auto', random_state=42)
+                km.fit(X)
+                tgt_cluster = km.predict([x_tgt])[0]
+                mask = (km.labels_ == tgt_cluster)
+                X = X[mask]
+                df_candidates = df_candidates.loc[df_candidates.index[mask]]
+            except Exception:
+                # if clustering fails, proceed without restricting
+                pass
+        # ----------------------------------------------------------
+
+        # percentile ranks within (possibly restricted) candidate pool, per-league
         percl = df_candidates.groupby('League')[SIM_FEATURES].rank(pct=True)
-        # target percentiles computed on df global per-league
         target_percentiles = df.groupby('League')[SIM_FEATURES].rank(pct=True).loc[df['Player'] == player_name]
 
-        # standardize on candidate pool
-        scaler = StandardScaler()
-        standardized_features = scaler.fit_transform(df_candidates[SIM_FEATURES])
-        target_features_standardized = scaler.transform([target_row_full[SIM_FEATURES].values])
+        # ---------- Distances ----------
+        # Build linear weights by using sqrt in the geometry
+        w_vec = np.array([float(adv_weights.get(f, 1)) for f in SIM_FEATURES], dtype=float)
+        w_sqrt = np.sqrt(np.clip(w_vec, 1e-9, None))
 
-        # feature weights vector (from sliders)
-        weights_vec = np.array([float(adv_weights.get(f, 1)) for f in SIM_FEATURES], dtype=float)
+        # (1) Percentile-space distance (weighted Euclidean with sqrt weights)
+        dP = np.linalg.norm((percl.values - target_percentiles.values) * w_sqrt, axis=1)
 
-        percentile_distances = np.linalg.norm((percl.values - target_percentiles.values) * weights_vec, axis=1)
-        actual_value_distances = np.linalg.norm((standardized_features - target_features_standardized) * weights_vec, axis=1)
-        combined = percentile_distances * percentile_weight + actual_value_distances * (1.0 - percentile_weight)
+        # (2) Actual-value distance via Mahalanobis with shrinkage, AFTER applying sqrt-weights
+        Xw = X * w_sqrt
+        xw = x_tgt * w_sqrt
+        # robust covariance (always invertible with Ledoit-Wolf)
+        try:
+            lw = LedoitWolf().fit(Xw)
+            inv_cov = np.linalg.inv(lw.covariance_)
+        except Exception:
+            # emergency fallback: identity (reduces to Euclidean)
+            inv_cov = np.eye(Xw.shape[1])
 
-        # robust normalization -> similarity 0..100
-        arr = np.asarray(combined, dtype=float).ravel()
-        rng = np.ptp(arr)
-        norm = (arr - arr.min()) / (rng if rng != 0 else 1.0)
-        similarities = ((1.0 - norm) * 100.0).round(2)
+        delta = Xw - xw
+        # squared Mahalanobis: delta Σ^-1 delta^T
+        dM_sq = np.einsum('ij,jk,ik->i', delta, inv_cov, delta)
+        dM = np.sqrt(np.maximum(dM_sq, 0))
+
+        # blend
+        combined = dP * float(percentile_weight) + dM * (1.0 - float(percentile_weight))
+        # --------------------------------
+
+        # map distances to similarity 0..100 using selected scaling
+        similarities = distances_to_similarity(combined, scale_mode)
 
         out = df_candidates[['Player','Team','League','Age','Minutes played','Market value']].copy()
         out['League strength'] = out['League'].map(LS_MAP).fillna(0.0) if LS_MAP else 0.0
@@ -922,7 +1003,6 @@ if not player_row.empty:
         st.info("No candidates after similarity filters.")
 else:
     st.caption("Pick a player to see similar players.")
-
 
 
 # ---------------------------- (C) CLUB FIT — self-contained block ----------------------------
