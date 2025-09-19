@@ -615,7 +615,141 @@ st.dataframe(styled, use_container_width=True)
 # ============== BELOW THE NOTES: 3 EXTRA FEATURE BLOCKS ==============
 # =====================================================================
 
-# ----------------- (A) COMPARISON RADAR (SB-STYLE) -----------------
+# ----------------- (A) SCATTERPLOT — Goals vs xG -----------------
+st.markdown("---")
+st.header("📈 Scatter — Non-penalty Goals vs xG")
+
+with st.expander("Scatter settings", expanded=False):
+    # Axis metric picks (defaults as requested)
+    numeric_cols = df.select_dtypes(include="number").columns.tolist()
+    x_default = "Non-penalty goals per 90"
+    y_default = "xG per 90"
+    x_metric = st.selectbox("X-axis metric", [c for c in FEATURES if c in numeric_cols], index=FEATURES.index(x_default) if x_default in FEATURES else 0, key="sc_x")
+    y_metric = st.selectbox("Y-axis metric", [c for c in FEATURES if c in numeric_cols], index=FEATURES.index(y_default) if y_default in FEATURES else 1, key="sc_y")
+
+    # Pool: default = player's league; presets + custom add-ons
+    leagues_available_sc = sorted(df["League"].dropna().unique().tolist())
+    player_league = player_row.iloc[0]["League"] if not player_row.empty else None
+
+    preset_choices_sc = ["Player's league", "Top 5 Europe", "Top 20 Europe", "EFL (England 2–4)", "Custom"]
+    preset_sc = st.selectbox("League preset", preset_choices_sc, index=0, key="sc_preset")
+
+    preset_map_sc = {
+        "Player's league": {player_league} if player_league else set(),
+        "Top 5 Europe": set(PRESET_LEAGUES.get("Top 5 Europe", [])),
+        "Top 20 Europe": set(PRESET_LEAGUES.get("Top 20 Europe", [])),
+        "EFL (England 2–4)": set(PRESET_LEAGUES.get("EFL (England 2–4)", [])),
+        "Custom": set(),
+    }
+    preset_set = preset_map_sc.get(preset_sc, set())
+    add_leagues_sc = st.multiselect("Add leagues", leagues_available_sc, default=[], key="sc_add_leagues")
+    leagues_scatter = sorted(set(add_leagues_sc) | preset_set)
+
+    # If user left it empty, fall back to player's league so the plot always works
+    if not leagues_scatter and player_league:
+        leagues_scatter = [player_league]
+
+    same_pos_scatter = st.checkbox("Limit pool to current position prefix", value=True, key="sc_pos")
+
+    # Filters: minutes, age, league strength (quality)
+    df["Minutes played"] = pd.to_numeric(df["Minutes played"], errors="coerce")
+    df["Age"] = pd.to_numeric(df["Age"], errors="coerce")
+    min_minutes_s, max_minutes_s = st.slider("Minutes filter", 0, 5000, (1000, 5000), key="sc_min")
+    age_min_bound = int(np.nanmin(df["Age"])) if df["Age"].notna().any() else 14
+    age_max_bound = int(np.nanmax(df["Age"])) if df["Age"].notna().any() else 45
+    min_age_s, max_age_s = st.slider("Age filter", age_min_bound, age_max_bound, (16, 40), key="sc_age")
+
+    min_strength_s, max_strength_s = st.slider("League quality (strength)", 0, 101, (0, 101), key="sc_ls")
+    label_others = st.toggle("Label other players (same league only)", value=False, key="sc_labels")
+
+# ---- Build scatter pool ----
+try:
+    pool_sc = df[df["League"].isin(leagues_scatter)].copy()
+    if same_pos_scatter and not player_row.empty:
+        pref = str(player_row["Position"].iloc[0])[:2]
+        pool_sc = pool_sc[pool_sc["Position"].astype(str).str.startswith(pref)]
+
+    # numeric + filters
+    pool_sc["Minutes played"] = pd.to_numeric(pool_sc["Minutes played"], errors="coerce")
+    pool_sc["Age"] = pd.to_numeric(pool_sc["Age"], errors="coerce")
+    pool_sc = pool_sc[pool_sc["Minutes played"].between(min_minutes_s, max_minutes_s)]
+    pool_sc = pool_sc[pool_sc["Age"].between(min_age_s, max_age_s)]
+
+    # league quality filter
+    pool_sc["League Strength"] = pool_sc["League"].map(LEAGUE_STRENGTHS).fillna(0.0)
+    pool_sc = pool_sc[(pool_sc["League Strength"] >= float(min_strength_s)) & (pool_sc["League Strength"] <= float(max_strength_s))]
+
+    # Ensure metrics are numeric and present
+    if x_metric not in pool_sc.columns or y_metric not in pool_sc.columns:
+        st.info("Selected axis metrics are missing from the dataset.")
+    else:
+        pool_sc[x_metric] = pd.to_numeric(pool_sc[x_metric], errors="coerce")
+        pool_sc[y_metric] = pd.to_numeric(pool_sc[y_metric], errors="coerce")
+        pool_sc = pool_sc.dropna(subset=[x_metric, y_metric, "Player", "Team", "League"])
+
+        # Always include the selected player point (even if filtered out above)
+        ply_row_for_sc = player_row.iloc[0]
+        need_insert = True
+        if not pool_sc.empty:
+            need_insert = not (pool_sc["Player"] == ply_row_for_sc["Player"]).any()
+        if need_insert:
+            # bring minimal row with the two metrics
+            insertable = df[df["Player"] == ply_row_for_sc["Player"]].head(1).copy()
+            if not insertable.empty:
+                insertable["League Strength"] = insertable["League"].map(LEAGUE_STRENGTHS).fillna(0.0)
+                pool_sc = pd.concat([pool_sc, insertable], ignore_index=True, sort=False)
+
+        # ----- Plot -----
+        if pool_sc.empty:
+            st.info("No players in scatter pool after filters.")
+        else:
+            fig, ax = plt.subplots(figsize=(8.8, 6.2), dpi=180)
+            fig.patch.set_facecolor("#f3f4f6")      # grey page bg
+            ax.set_facecolor("#eeeeee")             # light grey plot bg
+
+            # Others (black)
+            others = pool_sc[pool_sc["Player"] != ply_row_for_sc["Player"]]
+            ax.scatter(others[x_metric], others[y_metric], s=28, c="black", alpha=0.8, linewidths=0, zorder=2)
+
+            # Selected player (red)
+            sel = pool_sc[pool_sc["Player"] == ply_row_for_sc["Player"]]
+            ax.scatter(sel[x_metric], sel[y_metric], s=80, c="#C81E1E", edgecolors="white", linewidths=0.9, zorder=3)
+
+            # Labels
+            # Always label the selected player
+            for _, r in sel.iterrows():
+                ax.annotate(r["Player"], (r[x_metric], r[y_metric]), xytext=(6, 6),
+                            textcoords="offset points", fontsize=9, fontweight="bold", color="#C81E1E", zorder=4)
+
+            # Optional: label *other* players from the same league as the selected player
+            if label_others and player_league is not None:
+                others_same_lg = others[others["League"] == player_league]
+                # Cap labels to avoid clutter
+                max_labels = min(len(others_same_lg), 150)
+                for _, r in others_same_lg.head(max_labels).iterrows():
+                    ax.annotate(r["Player"], (r[x_metric], r[y_metric]), xytext=(5, 5),
+                                textcoords="offset points", fontsize=8, color="#111827", alpha=0.85, zorder=3)
+
+            # Styling: bold axis labels, light grid
+            ax.set_xlabel(x_metric, fontweight="bold")
+            ax.set_ylabel(y_metric, fontweight="bold")
+            ax.grid(True, which="major", linewidth=0.7, color="#d1d5db")
+            ax.grid(True, which="minor", linewidth=0.5, color="#e5e7eb", alpha=0.7)
+            ax.minorticks_on()
+
+            # Subtle spines
+            for spine in ax.spines.values():
+                spine.set_edgecolor("#9ca3af")
+
+            # Caption with pool size
+            st.caption(f"Pool size: {len(pool_sc):,} • Leagues: {', '.join(sorted(set(pool_sc['League'])))}")
+            st.pyplot(fig, use_container_width=True)
+except Exception as e:
+    st.info(f"Scatter could not be drawn: {e}")
+# ----------------------------------------------------------------------
+
+
+# ----------------- (B) COMPARISON RADAR (SB-STYLE) -----------------
 st.markdown("---")
 st.header("📊 Player Comparison Radar")
 with st.expander("Radar settings", expanded=False):
@@ -761,7 +895,7 @@ if radar_metrics:
     except Exception as e:
         st.info(f"Radar could not be drawn: {e}")
 
-# ----------------- (B) SIMILAR PLAYERS (adjustable pool) -----------------
+# ----------------- (C) SIMILAR PLAYERS (adjustable pool) -----------------
 st.markdown("---")
 st.header("🧭 Similar players (within adjustable pool)")
 
@@ -952,7 +1086,7 @@ else:
     st.caption("Pick a player to see similar players.")
 
 
-# ---------------------------- (C) CLUB FIT — self-contained block ----------------------------
+# ---------------------------- (D) CLUB FIT — self-contained block ----------------------------
 st.markdown("---")
 st.header("🏟️ Club Fit Finder")
 
