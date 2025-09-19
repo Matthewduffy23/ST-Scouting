@@ -456,143 +456,158 @@ else:
                  fontsize=9, ha='left', color='#6b7280')
         st.pyplot(fig, use_container_width=True)
 
-    # ---------- 2) NOTES: Style / Strengths / Weaknesses ----------
+   # ---------- 2) NOTES: Style / Strengths / Weaknesses ----------
 
-    EXTRA_METRICS = [
-        'Defensive duels per 90','Aerial duels per 90','Aerial duels won, %',
-        'Non-penalty goals per 90','xG per 90','Shots per 90','Goal conversion, %',
-        'Crosses per 90','Accurate crosses, %','Dribbles per 90','Successful dribbles, %',
-        'Touches in box per 90','Progressive runs per 90','Passes per 90','Accurate passes, %',
-        'xA per 90','Passes to penalty area per 90','Deep completions per 90','Smart passes per 90'
+EXTRA_METRICS = [
+    'Defensive duels per 90','Aerial duels per 90','Aerial duels won, %',
+    'Non-penalty goals per 90','xG per 90','Shots per 90','Goal conversion, %',
+    'Crosses per 90','Accurate crosses, %','Dribbles per 90','Successful dribbles, %',
+    'Touches in box per 90','Progressive runs per 90','Passes per 90','Accurate passes, %',
+    'xA per 90','Passes to penalty area per 90','Deep completions per 90','Smart passes per 90'
+]
+STYLE_MAP = {
+    'Defensive duels per 90': {'style':'High work rate','sw':'Defensive Duels'},
+    'Aerial duels won, %': {'style':None,'sw':'Aerial Duels'},
+    'Aerial duels per 90': {'style':'Target Man','sw':'Aerial volume'},
+    'Non-penalty goals per 90': {'style':None,'sw':'Scoring Goals'},
+    'xG per 90': {'style':'Gets into good goal scoring positions','sw':'Attacking Positioning'},
+    'Shots per 90': {'style':'Takes many shots','sw':'Shot Volume'},
+    'Goal conversion, %': {'style':None,'sw':'Finishing'},
+    'Crosses per 90': {'style':'Moves into wide areas to create','sw':'Crossing Volume'},
+    'Dribbles per 90': {'style':'1v1 dribbler','sw':'Dribble Volume'},
+    'Successful dribbles, %': {'style':None,'sw':'Dribbling Efficiency'},
+    'Touches in box per 90': {'style':'Busy in the box','sw':'Penalty-box Coverage'},
+    'Progressive runs per 90': {'style':'Gets team up the pitch via carries','sw':'Progressive Runs'},
+    'Passes per 90': {'style':'Involved in build-up','sw':'Involvement'},
+    'Accurate passes, %': {'style':None,'sw':'Retention'},
+    'xA per 90': {'style':'Creates goal scoring chances','sw':'Chance Creation'},
+    'Passes to penalty area per 90': {'style':None,'sw':'Passes to Penalty Area'},
+    'Deep completions per 90': {'style':'Gets ball into the box','sw':None},
+    'Smart passes per 90': {'style':'Attempts through balls','sw': None},
+}
+HI, LO, STYLE_T = 70, 30, 65
+
+def percentile_in_series(value, series: pd.Series) -> float:
+    s = pd.to_numeric(series, errors="coerce").dropna()
+    if len(s) == 0 or pd.isna(value): 
+        return np.nan
+    rank = (s < float(value)).mean() * 100.0
+    eq_share = (s == float(value)).mean() * 100.0
+    return min(100.0, rank + 0.5 * eq_share)
+
+def chips(items, color):
+    if not items: return "_None identified._"
+    spans = [
+        f"<span style='background:{color};color:#111;padding:2px 6px;border-radius:10px;margin:0 6px 6px 0;display:inline-block'>{txt}</span>"
+        for txt in items[:10]
     ]
-    STYLE_MAP = {
-        'Defensive duels per 90': {'style':'High work rate','sw':'Defensive Duels'},
-        'Aerial duels won, %': {'style':None,'sw':'Aerial Duels'},
-        'Aerial duels per 90': {'style':'Target Man','sw':'Aerial volume'},
-        'Non-penalty goals per 90': {'style':None,'sw':'Scoring Goals'},
-        'xG per 90': {'style':'Gets into good goal scoring positions','sw':'Attacking Positioning'},
-        'Shots per 90': {'style':'Takes many shots','sw':'Shot Volume'},
-        'Goal conversion, %': {'style':None,'sw':'Finishing'},
-        'Crosses per 90': {'style':'Moves into wide areas to create','sw':'Crossing Volume'},
-        'Dribbles per 90': {'style':'1v1 dribbler','sw':'Dribble Volume'},
-        'Successful dribbles, %': {'style':None,'sw':'Dribbling Efficiency'},
-        'Touches in box per 90': {'style':'Busy in the box','sw':'Penalty-box Coverage'},
-        'Progressive runs per 90': {'style':'Gets team up the pitch via carries','sw':'Progressive Runs'},
-        'Passes per 90': {'style':'Involved in build-up','sw':'Involvement'},
-        'Accurate passes, %': {'style':None,'sw':'Retention'},
-        'xA per 90': {'style':'Creates goal scoring chances','sw':'Chance Creation'},
-        'Passes to penalty area per 90': {'style':None,'sw':'Passes to Penalty Area'},
-        'Deep completions per 90': {'style':'Gets ball into the box','sw':None},
-        'Smart passes per 90': {'style':'Attempts through balls','sw': None},
-    }
-    HI, LO, STYLE_T = 70, 30, 65
+    return " ".join(spans)
 
-    def percentile_in_series(value, series: pd.Series) -> float:
-        s = pd.to_numeric(series, errors="coerce").dropna()
-        if len(s) == 0 or pd.isna(value): 
-            return np.nan
-        rank = (s < float(value)).mean() * 100.0
-        eq_share = (s == float(value)).mean() * 100.0
-        return min(100.0, rank + 0.5 * eq_share)
-
-    def chips(items, color):
-        if not items: return "_None identified._"
-        spans = [
-            f"<span style='background:{color};color:#111;padding:2px 6px;border-radius:10px;margin:0 6px 6px 0;display:inline-block'>{txt}</span>"
-            for txt in items[:10]
-        ]
-        return " ".join(spans)
-
-    # Build pool-based percentiles for EXTRA_METRICS; fallback to league-table percentiles on the player row
-    pct_extra = {}
-    if isinstance(pool_df, pd.DataFrame) and not pool_df.empty:
-        for m in EXTRA_METRICS:
-            if m in df.columns and m in pool_df.columns and pd.notna(ply.get(m)):
-                pct_extra[m] = percentile_in_series(ply[m], pool_df[m])
+# Build pool-based percentiles for EXTRA_METRICS; fallback to league-table percentiles on the player row
+pct_extra = {}
+if isinstance(pool_df, pd.DataFrame) and not pool_df.empty:
     for m in EXTRA_METRICS:
-        if m not in pct_extra or pd.isna(pct_extra[m]):
-            col = f"{m} Percentile"
-            if col in player_row.columns and pd.notna(player_row[col].iloc[0]):
-                pct_extra[m] = float(player_row[col].iloc[0])
+        if m in df.columns and m in pool_df.columns and pd.notna(ply.get(m)):
+            pct_extra[m] = percentile_in_series(ply[m], pool_df[m])
+for m in EXTRA_METRICS:
+    if m not in pct_extra or pd.isna(pct_extra[m]):
+        col = f"{m} Percentile"
+        if col in player_row.columns and pd.notna(player_row[col].iloc[0]):
+            pct_extra[m] = float(player_row[col].iloc[0])
 
-    strengths, weaknesses, styles = [], [], []
-    for m, v in pct_extra.items():
-        if pd.isna(v): 
-            continue
-        lab = STYLE_MAP.get(m, {})
-        sw_name = lab.get('sw', m)
-        style_tag = lab.get('style')
-        if v >= HI: strengths.append((sw_name, v))
-        elif v <= LO: weaknesses.append((sw_name, v))
-        if style_tag and v >= STYLE_T: styles.append((style_tag, v))
+# Enforce style-only vs. strength/weakness-only via STYLE_MAP:
+# - If 'sw' is None -> do NOT score strengths/weaknesses
+# - If 'style' is None -> do NOT flag style
+strengths, weaknesses, styles = [], [], []
+for m, v in pct_extra.items():
+    if pd.isna(v): 
+        continue
+    cfg = STYLE_MAP.get(m, {})
+    sw_label = cfg.get('sw')          # keep None if absent
+    style_tag = cfg.get('style')      # keep None if absent
 
-    # De-dupe & sort nicely
-    if strengths:
-        strength_best = {name: max(p for n,p in strengths if n==name) for name,_ in strengths}
-        strengths = [name for name,_ in sorted(strength_best.items(), key=lambda kv: -kv[1])]
-    if weaknesses:
-        weakness_worst = {name: min(p for n,p in weaknesses if n==name) for name,_ in weaknesses}
-        weaknesses = [name for name,_ in sorted(weakness_worst.items(), key=lambda kv: kv[1])]
-    if styles:
-        style_best = {name: max(p for n,p in styles if n==name) for name,_ in styles}
-        styles = [name for name,_ in sorted(style_best.items(), key=lambda kv: -kv[1])]
+    # Strengths/Weaknesses only if an sw label exists
+    if sw_label:
+        if v >= HI:
+            strengths.append((sw_label, v))
+        elif v <= LO:
+            weaknesses.append((sw_label, v))
 
-    # Summary + chips
-    st.markdown(
-        f"**Profile:** {player_name} — {ply.get('Team','?')} ({ply.get('League','?')}), "
-        f"age {int(ply['Age']) if pd.notna(ply.get('Age')) else '—'}, "
-        f"minutes {int(ply['Minutes played']) if pd.notna(ply.get('Minutes played')) else '—'}."
-    )
-    st.markdown("**Style:**")
-    st.markdown(chips(styles, "#bfdbfe"), unsafe_allow_html=True)   # light blue
-    st.markdown("**Strengths:**")
-    st.markdown(chips(strengths, "#a7f3d0"), unsafe_allow_html=True)  # light green
-    st.markdown("**Weaknesses:**")
-    st.markdown(chips(weaknesses, "#fecaca"), unsafe_allow_html=True) # light red
+    # Style flag only if a style phrase exists
+    if style_tag and v >= STYLE_T:
+        styles.append((style_tag, v))
 
-    # ---------- 3) ROLE SCORES (MATCH TABLES EXACTLY) ----------
-    def table_style_role_scores_from_row(row):
-        """Use per-league percentiles from df_f (already computed) + sidebar league weighting."""
-        rs = {}
-        for role, rd in ROLES.items():
-            total_w = sum(rd["metrics"].values()) or 1.0
-            metric_score = 0.0
-            for m, w in rd["metrics"].items():
-                pct_col = f"{m} Percentile"
-                if pct_col in row.index and pd.notna(row[pct_col]):
-                    metric_score += float(row[pct_col]) * w
-            metric_score /= total_w
-            if use_league_weighting:
-                league_scaled = float(row.get("League Strength", 50.0))  # 0..100
-                metric_score = (1 - beta) * metric_score + beta * league_scaled
-            rs[role] = metric_score
-        return rs
+# De-dupe & sort nicely
+if strengths:
+    strength_best = {name: max(p for n,p in strengths if n==name) for name,_ in strengths}
+    strengths = [name for name,_ in sorted(strength_best.items(), key=lambda kv: -kv[1])]
+if weaknesses:
+    weakness_worst = {name: min(p for n,p in weaknesses if n==name) for name,_ in weaknesses}
+    weaknesses = [name for name,_ in sorted(weakness_worst.items(), key=lambda kv: kv[1])]
+if styles:
+    style_best = {name: max(p for n,p in styles if n==name) for name,_ in styles}
+    styles = [name for name,_ in sorted(style_best.items(), key=lambda kv: -kv[1])]
 
-    role_scores = table_style_role_scores_from_row(player_row.iloc[0])
+# Summary + chips
+st.markdown(
+    f"**Profile:** {player_name} — {ply.get('Team','?')} ({ply.get('League','?')}), "
+    f"age {int(ply['Age']) if pd.notna(ply.get('Age')) else '—'}, "
+    f"minutes {int(ply['Minutes played']) if pd.notna(ply.get('Minutes played')) else '—'}."
+)
+st.markdown("**Style:**")
+st.markdown(chips(styles, "#bfdbfe"), unsafe_allow_html=True)   # light blue
+st.markdown("**Strengths:**")
+st.markdown(chips(strengths, "#a7f3d0"), unsafe_allow_html=True)  # light green
+st.markdown("**Weaknesses:**")
+st.markdown(chips(weaknesses, "#fecaca"), unsafe_allow_html=True) # light red
 
-    # Best role line (based on the same logic)
-    if role_scores:
-        best_role = max(role_scores.items(), key=lambda kv: kv[1])[0]
+# ---------- 3) ROLE SCORES (MATCH TABLES EXACTLY) ----------
+def table_style_role_scores_from_row(row):
+    """Use per-league percentiles from df_f (already computed) + sidebar league weighting."""
+    rs = {}
+    for role, rd in ROLES.items():
+        total_w = sum(rd["metrics"].values()) or 1.0
+        metric_score = 0.0
+        for m, w in rd["metrics"].items():
+            pct_col = f"{m} Percentile"
+            if pct_col in row.index and pd.notna(row[pct_col]):
+                metric_score += float(row[pct_col]) * w
+        metric_score /= total_w
+        if use_league_weighting:
+            league_scaled = float(row.get("League Strength", 50.0))  # 0..100
+            metric_score = (1 - beta) * metric_score + beta * league_scaled
+        rs[role] = metric_score
+    return rs
+
+role_scores = table_style_role_scores_from_row(player_row.iloc[0])
+
+# Best role line — choose ONLY among the first three roles in ROLES
+if role_scores:
+    role_list = list(ROLES.keys())[:3]
+    candidates = [(r, role_scores.get(r, np.nan)) for r in role_list]
+    candidates = [(r, v) for r, v in candidates if pd.notna(v)]
+    if candidates:
+        best_role = max(candidates, key=lambda kv: kv[1])[0]
         st.markdown(f"**Best role:** {best_role}.")
 
-    # Role table with gradient colors
-    def score_to_color(v: float) -> str:
-        if pd.isna(v): return "background-color: #ffffff"
-        if v <= 50:
-            r1,g1,b1 = (190,42,62); r2,g2,b2 = (244,209,102); t = v/50
-        else:
-            r1,g1,b1 = (244,209,102); r2,g2,b2 = (34,197,94); t = (v-50)/50
-        r = int(r1 + (r2-r1)*t); g = int(g1 + (g2-g1)*t); b = int(b1 + (b2-b1)*t)
-        return f"background-color: rgb({r},{g},{b})"
+# Role table with gradient colors (show all roles)
+def score_to_color(v: float) -> str:
+    if pd.isna(v): return "background-color: #ffffff"
+    if v <= 50:
+        r1,g1,b1 = (190,42,62); r2,g2,b2 = (244,209,102); t = v/50
+    else:
+        r1,g1,b1 = (244,209,102); r2,g2,b2 = (34,197,94); t = (v-50)/50
+    r = int(r1 + (r2-r1)*t); g = int(g1 + (g2-g1)*t); b = int(b1 + (b2-b1)*t)
+    return f"background-color: rgb({r},{g},{b})"
 
-    rows = [{"Role": r, "Percentile": role_scores.get(r, np.nan)} for r in ROLES.keys()]
-    role_df = pd.DataFrame(rows).set_index("Role")
-    styled = (
-        role_df.style
-        .applymap(lambda x: score_to_color(float(x)) if pd.notna(x) else "background-color:#fff", subset=["Percentile"])
-        .format({"Percentile": lambda x: f"{int(round(x))}" if pd.notna(x) else "—"})
-    )
-    st.dataframe(styled, use_container_width=True)
+rows = [{"Role": r, "Percentile": role_scores.get(r, np.nan)} for r in ROLES.keys()]
+role_df = pd.DataFrame(rows).set_index("Role")
+styled = (
+    role_df.style
+    .applymap(lambda x: score_to_color(float(x)) if pd.notna(x) else "background-color:#fff", subset=["Percentile"])
+    .format({"Percentile": lambda x: f"{int(round(x))}" if pd.notna(x) else "—"})
+)
+st.dataframe(styled, use_container_width=True)
 # ----------------- END SINGLE PLAYER ROLE PROFILE -----------------
 
 
