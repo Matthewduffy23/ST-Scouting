@@ -678,8 +678,8 @@ with st.expander("Scatter settings", expanded=False):
     min_strength_s, max_strength_s = st.slider("League quality (strength)", 0, 101, (0, 101), key="sc_ls")
 
     # Label toggles
-    label_others_same = st.toggle("Label other players (same league)", value=False, key="sc_labels_same")
-    label_all = st.toggle("Label ALL players in chart (overrides above)", value=False, key="sc_labels_all")
+    label_all = st.toggle("Label ALL players in chart", value=False, key="sc_labels_all")
+    allow_overlap = st.toggle("Allow overlapping labels", value=False, key="sc_overlap")
 
     # Visual improvements (implemented below)
     show_medians = st.checkbox("Show median reference lines", value=True, key="sc_medians")
@@ -715,16 +715,15 @@ try:
         pool_sc = pool_sc.dropna(subset=[x_metric, y_metric, "Player", "Team", "League"])
 
         # Always include the selected player point (even if filtered out above)
-        if not player_row.empty:
-            ply_row_for_sc = player_row.iloc[0]
+        sel_name = player_row.iloc[0]["Player"] if not player_row.empty else None
+        if sel_name is not None:
             need_insert = True
             if not pool_sc.empty:
-                need_insert = not (pool_sc["Player"] == ply_row_for_sc["Player"]).any()
+                need_insert = not (pool_sc["Player"] == sel_name).any()
             if need_insert:
-                insertable = df[df["Player"] == ply_row_for_sc["Player"]].head(1).copy()
+                insertable = df[df["Player"] == sel_name].head(1).copy()
                 if not insertable.empty:
                     insertable["League Strength"] = insertable["League"].map(LEAGUE_STRENGTHS).fillna(0.0)
-                    # ensure numeric
                     insertable[x_metric] = pd.to_numeric(insertable[x_metric], errors="coerce")
                     insertable[y_metric] = pd.to_numeric(insertable[y_metric], errors="coerce")
                     pool_sc = pd.concat([pool_sc, insertable], ignore_index=True, sort=False)
@@ -751,14 +750,14 @@ try:
             ax.set_xlim(*xlim); ax.set_ylim(*ylim)
 
             # Others (black)
-            sel_name = player_row.iloc[0]["Player"] if not player_row.empty else None
-            others = pool_sc[pool_sc["Player"] != sel_name] if sel_name else pool_sc
+            others = pool_sc[pool_sc["Player"] != sel_name] if sel_name is not None else pool_sc
             ax.scatter(
                 others[x_metric], others[y_metric],
                 s=30, c="black", alpha=float(point_alpha), linewidths=0.4, edgecolors="white", zorder=2
             )
 
-            # Selected player (red)
+            # Selected player (red) + label (only once)
+            already_labeled = set()
             if sel_name is not None:
                 sel = pool_sc[pool_sc["Player"] == sel_name]
                 ax.scatter(
@@ -769,8 +768,9 @@ try:
                     ax.annotate(
                         r["Player"], (r[x_metric], r[y_metric]),
                         xytext=(8, 8), textcoords="offset points",
-                        fontsize=9, fontweight="bold", color="#C81E1E", zorder=5
+                        fontsize= ninth, fontweight="bold", color="#C81E1E", zorder=5
                     )
+                    already_labeled.add(r["Player"])
 
             # ----- Visual improvements -----
             # 1) Optional IQR shading (helps quick orientation)
@@ -780,40 +780,46 @@ try:
                 ax.axvspan(x_q1, x_q3, color="#d1d5db", alpha=0.25, zorder=1)
                 ax.axhspan(y_q1, y_q3, color="#d1d5db", alpha=0.25, zorder=1)
 
-            # 2) Median reference lines (dashed), with small labels
+            # 2) Median reference lines (dashed), with unified label "Median"
             if show_medians:
                 med_x = float(np.nanmedian(x_vals)); med_y = float(np.nanmedian(y_vals))
                 ax.axvline(med_x, color="#6b7280", ls="--", lw=1.25, zorder=1.5)
                 ax.axhline(med_y, color="#6b7280", ls="--", lw=1.25, zorder=1.5)
-                # annotate medians (stick to edges)
-                ax.text(med_x, ylim[1], "Median X", ha="right", va="bottom",
-                        fontsize=8, color="#374151", backgroundcolor="white", zorder=3)
-                ax.text(xlim[0], med_y, "Median Y", ha="left", va="top",
-                        fontsize=8, color="#374151", backgroundcolor="white", zorder=3)
+                ax.text(med_x, ylim[1], "Median", ha="right", va="bottom",
+                        fontsize=8, color="#374151", backgroundcolor="white", zorder=3, clip_on=True)
+                ax.text(xlim[0], med_y, "Median", ha="left", va="top",
+                        fontsize=8, color="#374151", backgroundcolor="white", zorder=3, clip_on=True)
 
-            # 3) Optional labeling of others
+            # 3) Optional labeling of ALL players (without duplication)
             if label_all:
-                # label everyone (cap to avoid extreme clutter)
                 label_df = pool_sc
-                max_labels = min(len(label_df), 300)
+                # Simple overlap-avoidance: skip labels too close to an already-labeled point
+                x_tol = (xlim[1] - xlim[0]) * 0.02
+                y_tol = (ylim[1] - ylim[0]) * 0.02
+                placed_pts = []
+
+                # seed with the selected player's position(s) if present
+                if sel_name is not None and not sel.empty:
+                    for _, r in sel.iterrows():
+                        placed_pts.append((float(r[x_metric]), float(r[y_metric])))
+
                 offsets = [(6,6), (-6,6), (6,-6), (-6,-6)]
-                for i, (_, r) in enumerate(label_df.head(max_labels).iterrows()):
-                    color = "#C81E1E" if (sel_name is not None and r["Player"] == sel_name) else "#111827"
-                    fw = "bold" if color == "#C81E1E" else "normal"
+                for i, (_, r) in enumerate(label_df.iterrows()):
+                    pname = r["Player"]
+                    # don't duplicate the selected player's label
+                    if pname in already_labeled:
+                        continue
+
+                    px, py = float(r[x_metric]), float(r[y_metric])
+                    if not allow_overlap:
+                        too_close = any((abs(px - qx) < x_tol and abs(py - qy) < y_tol) for (qx, qy) in placed_pts)
+                        if too_close:
+                            continue
+                        placed_pts.append((px, py))
+
                     dx, dy = offsets[i % len(offsets)]
                     ax.annotate(
-                        r["Player"], (r[x_metric], r[y_metric]),
-                        xytext=(dx, dy), textcoords="offset points",
-                        fontsize=8, color=color, fontweight=fw, zorder=3
-                    )
-            elif label_others_same and (player_league is not None):
-                others_same_lg = others[others["League"] == player_league]
-                max_labels = min(len(others_same_lg), 150)
-                offsets = [(6,6), (-6,6), (6,-6), (-6,-6)]
-                for i, (_, r) in enumerate(others_same_lg.head(max_labels).iterrows()):
-                    dx, dy = offsets[i % len(offsets)]
-                    ax.annotate(
-                        r["Player"], (r[x_metric], r[y_metric]),
+                        pname, (px, py),
                         xytext=(dx, dy), textcoords="offset points",
                         fontsize=8, color="#111827", zorder=3
                     )
