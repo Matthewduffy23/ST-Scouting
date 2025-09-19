@@ -677,7 +677,8 @@ with st.expander("Scatter settings", expanded=False):
 
     min_strength_s, max_strength_s = st.slider("League quality (strength)", 0, 101, (0, 101), key="sc_ls")
 
-    # Label toggles
+    # Label & inclusion toggles
+    include_selected = st.toggle("Include selected player", value=True, key="sc_include")  # NEW
     label_all = st.toggle("Label ALL players in chart", value=False, key="sc_labels_all")
     allow_overlap = st.toggle("Allow overlapping labels", value=False, key="sc_overlap")
 
@@ -714,14 +715,20 @@ try:
         pool_sc[y_metric] = pd.to_numeric(pool_sc[y_metric], errors="coerce")
         pool_sc = pool_sc.dropna(subset=[x_metric, y_metric, "Player", "Team", "League"])
 
-        # Always include the selected player point (even if filtered out above)
-        sel_name = player_row.iloc[0]["Player"] if not player_row.empty else None
-        if sel_name is not None:
+        # Selected player's name (regardless of inclusion toggle)
+        selected_player_name = player_row.iloc[0]["Player"] if not player_row.empty else None
+
+        # If excluded, make sure the selected player is NOT in the pool
+        if not include_selected and selected_player_name is not None and not pool_sc.empty:
+            pool_sc = pool_sc[pool_sc["Player"] != selected_player_name]
+
+        # If included, ensure we add them even if filtered out above
+        if include_selected and selected_player_name is not None:
             need_insert = True
             if not pool_sc.empty:
-                need_insert = not (pool_sc["Player"] == sel_name).any()
+                need_insert = not (pool_sc["Player"] == selected_player_name).any()
             if need_insert:
-                insertable = df[df["Player"] == sel_name].head(1).copy()
+                insertable = df[df["Player"] == selected_player_name].head(1).copy()
                 if not insertable.empty:
                     insertable["League Strength"] = insertable["League"].map(LEAGUE_STRENGTHS).fillna(0.0)
                     insertable[x_metric] = pd.to_numeric(insertable[x_metric], errors="coerce")
@@ -749,6 +756,9 @@ try:
             xlim = padded_limits(x_vals); ylim = padded_limits(y_vals)
             ax.set_xlim(*xlim); ax.set_ylim(*ylim)
 
+            # Determine whether we have a selected player to highlight
+            sel_name = selected_player_name if include_selected else None
+
             # Others (black)
             others = pool_sc[pool_sc["Player"] != sel_name] if sel_name is not None else pool_sc
             ax.scatter(
@@ -756,7 +766,7 @@ try:
                 s=30, c="black", alpha=float(point_alpha), linewidths=0.4, edgecolors="white", zorder=2
             )
 
-            # Selected player (red) + label (only once)
+            # Selected player (red) + label (only once) if included
             already_labeled = set()
             if sel_name is not None:
                 sel = pool_sc[pool_sc["Player"] == sel_name]
@@ -798,7 +808,7 @@ try:
                 y_tol = (ylim[1] - ylim[0]) * 0.02
                 placed_pts = []
 
-                # seed with the selected player's position(s) if present
+                # seed with the selected player's position(s) if present & included
                 if sel_name is not None:
                     sel_seed = pool_sc[pool_sc["Player"] == sel_name]
                     for _, r in sel_seed.iterrows():
