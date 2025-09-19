@@ -457,6 +457,61 @@ else:
         st.pyplot(fig, use_container_width=True)
 
     # ---------- 2) NOTES: Style / Strengths / Weaknesses ----------
+    def extract_style_sw(pct_map, metrics, style_map, HI=70, LO=30, STYLE_T=65):
+    styles, strengths, weaknesses = [], [], []
+
+    def uniq(seq):
+        seen = set(); out = []
+        for x in seq:
+            if x and x not in seen:
+                out.append(x); seen.add(x)
+        return out
+
+    for m in metrics:
+        if m not in pct_map:
+            continue
+        p = pct_map[m]
+        cfg = style_map.get(m, {})
+        style_phrase = cfg.get('style')
+        sw_label     = cfg.get('sw')
+
+        # Style flag (independent of strengths/weaknesses)
+        if style_phrase and p >= STYLE_T:
+            styles.append(style_phrase)
+
+        # Strengths / Weaknesses only if an sw label exists
+        if sw_label:
+            if p >= HI:
+                strengths.append(sw_label)
+            elif p <= LO:
+                weaknesses.append(sw_label)
+
+    return uniq(styles), uniq(strengths), uniq(weaknesses)
+
+# --- usage ---
+styles, strengths, weaknesses = extract_style_sw(
+    pct_map, EXTRA_METRICS, STYLE_MAP, HI=HI, LO=LO, STYLE_T=STYLE_T
+)
+
+# Render (Streamlit)
+st.markdown("### Style")
+if styles:
+    for s in styles: st.markdown(f"- {s}")
+else:
+    st.caption("No strong stylistic flags.")
+
+st.markdown("### Strengths")
+if strengths:
+    for s in strengths: st.markdown(f"- {s}")
+else:
+    st.caption("No standout strengths relative to pool.")
+
+st.markdown("### Weaknesses")
+if weaknesses:
+    for w in weaknesses: st.markdown(f"- {w}")
+else:
+    st.caption("No standout weaknesses relative to pool.")
+
     EXTRA_METRICS = [
         'Defensive duels per 90','Aerial duels per 90','Aerial duels won, %',
         'Non-penalty goals per 90','xG per 90','Shots per 90','Goal conversion, %',
@@ -484,7 +539,7 @@ else:
         'Deep completions per 90': {'style':'Gets ball into the box','sw':None},
         'Smart passes per 90': {'style':'Attempts through balls','sw': None},
     }
-    HI, LO, STYLE_T = 75, 30, 65
+    HI, LO, STYLE_T = 70, 30, 65
 
     def percentile_in_series(value, series: pd.Series) -> float:
         s = pd.to_numeric(series, errors="coerce").dropna()
@@ -601,7 +656,7 @@ else:
 
 # ----------------- (A) COMPARISON RADAR (SB-STYLE) -----------------
 st.markdown("---")
-st.header("📊 Player Comparison — SB Radar")
+st.header("📊 Player Comparison Radar")
 with st.expander("Radar settings", expanded=False):
     # default pos prefix from selected player
     pos_scope = st.text_input("Position startswith (radar pool)", default_pos_prefix, key="rad_pos")
