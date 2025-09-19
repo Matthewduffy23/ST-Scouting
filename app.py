@@ -681,7 +681,7 @@ with st.expander("Scatter settings", expanded=False):
     label_all = st.toggle("Label ALL players in chart", value=False, key="sc_labels_all")
     allow_overlap = st.toggle("Allow overlapping labels", value=False, key="sc_overlap")
 
-    # Visual improvements (implemented below)
+    # Visual improvements
     show_medians = st.checkbox("Show median reference lines", value=True, key="sc_medians")
     shade_iqr = st.checkbox("Shade interquartile range (25–75%)", value=True, key="sc_iqr")
     point_alpha = st.slider("Point opacity", 0.2, 1.0, 0.85, 0.05, key="sc_alpha")
@@ -768,7 +768,7 @@ try:
                     ax.annotate(
                         r["Player"], (r[x_metric], r[y_metric]),
                         xytext=(8, 8), textcoords="offset points",
-                        fontsize= ninth, fontweight="bold", color="#C81E1E", zorder=5
+                        fontsize=9, fontweight="bold", color="#C81E1E", zorder=5
                     )
                     already_labeled.add(r["Player"])
 
@@ -799,8 +799,9 @@ try:
                 placed_pts = []
 
                 # seed with the selected player's position(s) if present
-                if sel_name is not None and not sel.empty:
-                    for _, r in sel.iterrows():
+                if sel_name is not None:
+                    sel_seed = pool_sc[pool_sc["Player"] == sel_name]
+                    for _, r in sel_seed.iterrows():
                         placed_pts.append((float(r[x_metric]), float(r[y_metric])))
 
                 offsets = [(6,6), (-6,6), (6,-6), (-6,-6)]
