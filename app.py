@@ -624,14 +624,30 @@ with st.expander("Scatter settings", expanded=False):
     numeric_cols = df.select_dtypes(include="number").columns.tolist()
     x_default = "Non-penalty goals per 90"
     y_default = "xG per 90"
-    x_metric = st.selectbox("X-axis metric", [c for c in FEATURES if c in numeric_cols], index=FEATURES.index(x_default) if x_default in FEATURES else 0, key="sc_x")
-    y_metric = st.selectbox("Y-axis metric", [c for c in FEATURES if c in numeric_cols], index=FEATURES.index(y_default) if y_default in FEATURES else 1, key="sc_y")
+    x_metric = st.selectbox(
+        "X-axis metric",
+        [c for c in FEATURES if c in numeric_cols],
+        index=(FEATURES.index(x_default) if x_default in FEATURES else 0),
+        key="sc_x",
+    )
+    y_metric = st.selectbox(
+        "Y-axis metric",
+        [c for c in FEATURES if c in numeric_cols],
+        index=(FEATURES.index(y_default) if y_default in FEATURES else 1),
+        key="sc_y",
+    )
 
     # Pool: default = player's league; presets + custom add-ons
     leagues_available_sc = sorted(df["League"].dropna().unique().tolist())
     player_league = player_row.iloc[0]["League"] if not player_row.empty else None
 
-    preset_choices_sc = ["Player's league", "Top 5 Europe", "Top 20 Europe", "EFL (England 2–4)", "Custom"]
+    preset_choices_sc = [
+        "Player's league",
+        "Top 5 Europe",
+        "Top 20 Europe",
+        "EFL (England 2–4)",
+        "Custom",
+    ]
     preset_sc = st.selectbox("League preset", preset_choices_sc, index=0, key="sc_preset")
 
     preset_map_sc = {
@@ -660,7 +676,15 @@ with st.expander("Scatter settings", expanded=False):
     min_age_s, max_age_s = st.slider("Age filter", age_min_bound, age_max_bound, (16, 40), key="sc_age")
 
     min_strength_s, max_strength_s = st.slider("League quality (strength)", 0, 101, (0, 101), key="sc_ls")
-    label_others = st.toggle("Label other players (same league only)", value=False, key="sc_labels")
+
+    # Label toggles
+    label_others_same = st.toggle("Label other players (same league)", value=False, key="sc_labels_same")
+    label_all = st.toggle("Label ALL players in chart (overrides above)", value=False, key="sc_labels_all")
+
+    # Visual improvements (implemented below)
+    show_medians = st.checkbox("Show median reference lines", value=True, key="sc_medians")
+    shade_iqr = st.checkbox("Shade interquartile range (25–75%)", value=True, key="sc_iqr")
+    point_alpha = st.slider("Point opacity", 0.2, 1.0, 0.85, 0.05, key="sc_alpha")
 
 # ---- Build scatter pool ----
 try:
@@ -677,7 +701,10 @@ try:
 
     # league quality filter
     pool_sc["League Strength"] = pool_sc["League"].map(LEAGUE_STRENGTHS).fillna(0.0)
-    pool_sc = pool_sc[(pool_sc["League Strength"] >= float(min_strength_s)) & (pool_sc["League Strength"] <= float(max_strength_s))]
+    pool_sc = pool_sc[
+        (pool_sc["League Strength"] >= float(min_strength_s))
+        & (pool_sc["League Strength"] <= float(max_strength_s))
+    ]
 
     # Ensure metrics are numeric and present
     if x_metric not in pool_sc.columns or y_metric not in pool_sc.columns:
@@ -688,61 +715,121 @@ try:
         pool_sc = pool_sc.dropna(subset=[x_metric, y_metric, "Player", "Team", "League"])
 
         # Always include the selected player point (even if filtered out above)
-        ply_row_for_sc = player_row.iloc[0]
-        need_insert = True
-        if not pool_sc.empty:
-            need_insert = not (pool_sc["Player"] == ply_row_for_sc["Player"]).any()
-        if need_insert:
-            # bring minimal row with the two metrics
-            insertable = df[df["Player"] == ply_row_for_sc["Player"]].head(1).copy()
-            if not insertable.empty:
-                insertable["League Strength"] = insertable["League"].map(LEAGUE_STRENGTHS).fillna(0.0)
-                pool_sc = pd.concat([pool_sc, insertable], ignore_index=True, sort=False)
+        if not player_row.empty:
+            ply_row_for_sc = player_row.iloc[0]
+            need_insert = True
+            if not pool_sc.empty:
+                need_insert = not (pool_sc["Player"] == ply_row_for_sc["Player"]).any()
+            if need_insert:
+                insertable = df[df["Player"] == ply_row_for_sc["Player"]].head(1).copy()
+                if not insertable.empty:
+                    insertable["League Strength"] = insertable["League"].map(LEAGUE_STRENGTHS).fillna(0.0)
+                    # ensure numeric
+                    insertable[x_metric] = pd.to_numeric(insertable[x_metric], errors="coerce")
+                    insertable[y_metric] = pd.to_numeric(insertable[y_metric], errors="coerce")
+                    pool_sc = pd.concat([pool_sc, insertable], ignore_index=True, sort=False)
 
         # ----- Plot -----
         if pool_sc.empty:
             st.info("No players in scatter pool after filters.")
         else:
-            fig, ax = plt.subplots(figsize=(8.8, 6.2), dpi=180)
-            fig.patch.set_facecolor("#f3f4f6")      # grey page bg
-            ax.set_facecolor("#eeeeee")             # light grey plot bg
+            fig, ax = plt.subplots(figsize=(9.4, 6.6), dpi=200)
+            # Grey page & axis backgrounds
+            fig.patch.set_facecolor("#f3f4f6")     # page bg
+            ax.set_facecolor("#eeeeee")            # plot bg
+
+            # Compute limits with a small padding so labels/points don't clip
+            x_vals = pool_sc[x_metric].values
+            y_vals = pool_sc[y_metric].values
+            def padded_limits(arr, pad_frac=0.06):
+                a_min, a_max = float(np.nanmin(arr)), float(np.nanmax(arr))
+                if a_min == a_max:
+                    a_min -= 1e-6; a_max += 1e-6
+                pad = (a_max - a_min) * pad_frac
+                return a_min - pad, a_max + pad
+            xlim = padded_limits(x_vals); ylim = padded_limits(y_vals)
+            ax.set_xlim(*xlim); ax.set_ylim(*ylim)
 
             # Others (black)
-            others = pool_sc[pool_sc["Player"] != ply_row_for_sc["Player"]]
-            ax.scatter(others[x_metric], others[y_metric], s=28, c="black", alpha=0.8, linewidths=0, zorder=2)
+            sel_name = player_row.iloc[0]["Player"] if not player_row.empty else None
+            others = pool_sc[pool_sc["Player"] != sel_name] if sel_name else pool_sc
+            ax.scatter(
+                others[x_metric], others[y_metric],
+                s=30, c="black", alpha=float(point_alpha), linewidths=0.4, edgecolors="white", zorder=2
+            )
 
             # Selected player (red)
-            sel = pool_sc[pool_sc["Player"] == ply_row_for_sc["Player"]]
-            ax.scatter(sel[x_metric], sel[y_metric], s=80, c="#C81E1E", edgecolors="white", linewidths=0.9, zorder=3)
+            if sel_name is not None:
+                sel = pool_sc[pool_sc["Player"] == sel_name]
+                ax.scatter(
+                    sel[x_metric], sel[y_metric],
+                    s=90, c="#C81E1E", edgecolors="white", linewidths=1.0, zorder=4
+                )
+                for _, r in sel.iterrows():
+                    ax.annotate(
+                        r["Player"], (r[x_metric], r[y_metric]),
+                        xytext=(8, 8), textcoords="offset points",
+                        fontsize=9, fontweight="bold", color="#C81E1E", zorder=5
+                    )
 
-            # Labels
-            # Always label the selected player
-            for _, r in sel.iterrows():
-                ax.annotate(r["Player"], (r[x_metric], r[y_metric]), xytext=(6, 6),
-                            textcoords="offset points", fontsize=9, fontweight="bold", color="#C81E1E", zorder=4)
+            # ----- Visual improvements -----
+            # 1) Optional IQR shading (helps quick orientation)
+            if shade_iqr:
+                x_q1, x_q3 = np.nanpercentile(x_vals, [25, 75])
+                y_q1, y_q3 = np.nanpercentile(y_vals, [25, 75])
+                ax.axvspan(x_q1, x_q3, color="#d1d5db", alpha=0.25, zorder=1)
+                ax.axhspan(y_q1, y_q3, color="#d1d5db", alpha=0.25, zorder=1)
 
-            # Optional: label *other* players from the same league as the selected player
-            if label_others and player_league is not None:
+            # 2) Median reference lines (dashed), with small labels
+            if show_medians:
+                med_x = float(np.nanmedian(x_vals)); med_y = float(np.nanmedian(y_vals))
+                ax.axvline(med_x, color="#6b7280", ls="--", lw=1.25, zorder=1.5)
+                ax.axhline(med_y, color="#6b7280", ls="--", lw=1.25, zorder=1.5)
+                # annotate medians (stick to edges)
+                ax.text(med_x, ylim[1], "Median X", ha="right", va="bottom",
+                        fontsize=8, color="#374151", backgroundcolor="white", zorder=3)
+                ax.text(xlim[0], med_y, "Median Y", ha="left", va="top",
+                        fontsize=8, color="#374151", backgroundcolor="white", zorder=3)
+
+            # 3) Optional labeling of others
+            if label_all:
+                # label everyone (cap to avoid extreme clutter)
+                label_df = pool_sc
+                max_labels = min(len(label_df), 300)
+                offsets = [(6,6), (-6,6), (6,-6), (-6,-6)]
+                for i, (_, r) in enumerate(label_df.head(max_labels).iterrows()):
+                    color = "#C81E1E" if (sel_name is not None and r["Player"] == sel_name) else "#111827"
+                    fw = "bold" if color == "#C81E1E" else "normal"
+                    dx, dy = offsets[i % len(offsets)]
+                    ax.annotate(
+                        r["Player"], (r[x_metric], r[y_metric]),
+                        xytext=(dx, dy), textcoords="offset points",
+                        fontsize=8, color=color, fontweight=fw, zorder=3
+                    )
+            elif label_others_same and (player_league is not None):
                 others_same_lg = others[others["League"] == player_league]
-                # Cap labels to avoid clutter
                 max_labels = min(len(others_same_lg), 150)
-                for _, r in others_same_lg.head(max_labels).iterrows():
-                    ax.annotate(r["Player"], (r[x_metric], r[y_metric]), xytext=(5, 5),
-                                textcoords="offset points", fontsize=8, color="#111827", alpha=0.85, zorder=3)
+                offsets = [(6,6), (-6,6), (6,-6), (-6,-6)]
+                for i, (_, r) in enumerate(others_same_lg.head(max_labels).iterrows()):
+                    dx, dy = offsets[i % len(offsets)]
+                    ax.annotate(
+                        r["Player"], (r[x_metric], r[y_metric]),
+                        xytext=(dx, dy), textcoords="offset points",
+                        fontsize=8, color="#111827", zorder=3
+                    )
 
-            # Styling: bold axis labels, light grid
+            # Styling: bold axis labels, light grid, subtle spines
             ax.set_xlabel(x_metric, fontweight="bold")
             ax.set_ylabel(y_metric, fontweight="bold")
             ax.grid(True, which="major", linewidth=0.7, color="#d1d5db")
-            ax.grid(True, which="minor", linewidth=0.5, color="#e5e7eb", alpha=0.7)
+            ax.grid(True, which="minor", linewidth=0.45, color="#e5e7eb", alpha=0.7)
             ax.minorticks_on()
-
-            # Subtle spines
             for spine in ax.spines.values():
                 spine.set_edgecolor("#9ca3af")
 
-            # Caption with pool size
-            st.caption(f"Pool size: {len(pool_sc):,} • Leagues: {', '.join(sorted(set(pool_sc['League'])))}")
+            # Caption with pool size & leagues
+            leagues_shown = ", ".join(sorted(set(pool_sc["League"])))
+            st.caption(f"Pool size: {len(pool_sc):,} • Leagues: {leagues_shown}")
             st.pyplot(fig, use_container_width=True)
 except Exception as e:
     st.info(f"Scatter could not be drawn: {e}")
