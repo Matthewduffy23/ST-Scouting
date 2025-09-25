@@ -869,22 +869,38 @@ else:
     badge_x = NAME_X + name_w_frac + 0.010
 
     if isinstance(role_scores, dict) and role_scores:
-        _, best_val_raw = max(role_scores.items(), key=lambda kv: kv[1])
-        _ls_map = globals().get("LEAGUE_STRENGTHS", {})
-        league_strength = float(_ls_map.get(league, 50.0))
-        BETA_BADGE = 0.40
-        best_val_adj = (1.0 - BETA_BADGE) * float(best_val_raw) + BETA_BADGE * league_strength
+    # --- exclude "Target Man CF" from badge calculation ---
+    import re
+    def _norm_role(s: str) -> str:
+        return re.sub(r"[^a-z]+", " ", str(s).lower()).strip()
 
-        R, G, B = [int(255*c) for c in div_color_tuple(best_val_adj)]
-        bh = name_h_frac; bw = bh; by = 0.962 - bh
-        fig.patches.append(mpatches.FancyBboxPatch(
-            (badge_x, by), bw, bh,
-            boxstyle="round,pad=0.001,rounding_size=0.011",
-            transform=fig.transFigure,
-            facecolor=f"#{R:02x}{G:02x}{B:02x}", edgecolor="none"
-        ))
-        fig.text(badge_x + bw/2, by + bh/2 - 0.0005, f"{int(round(best_val_adj))}",
-                 fontsize=18.6, color="#FFFFFF", va="center", ha="center", fontweight="900")
+    roles_for_badge = {
+        k: v for k, v in role_scores.items()
+        if _norm_role(k) != "target man cf"
+    }
+    if not roles_for_badge:
+        roles_for_badge = role_scores
+
+    # best role score (without Target Man CF)
+    _, best_val_raw = max(roles_for_badge.items(), key=lambda kv: kv[1])
+
+    # league strength adjustment
+    _ls_map = globals().get("LEAGUE_STRENGTHS", {})
+    league_strength = float(_ls_map.get(league, 50.0))
+    BETA_BADGE = 0.40
+    best_val_adj = (1.0 - BETA_BADGE) * float(best_val_raw) + BETA_BADGE * league_strength
+
+    # draw badge
+    R, G, B = [int(255*c) for c in div_color_tuple(best_val_adj)]
+    bh = name_h_frac; bw = bh; by = 0.962 - bh
+    fig.patches.append(mpatches.FancyBboxPatch(
+        (badge_x, by), bw, bh,
+        boxstyle="round,pad=0.001,rounding_size=0.011",
+        transform=fig.transFigure,
+        facecolor=f"#{R:02x}{G:02x}{B:02x}", edgecolor="none"
+    ))
+    fig.text(badge_x + bw/2, by + bh/2 - 0.0005, f"{int(round(best_val_adj))}",
+             fontsize=18.6, color="#FFFFFF", va="center", ha="center", fontweight="900")
 
     # Meta row (more left padding)
     x_meta = META_X; y_meta = 0.905; gap = 0.004
