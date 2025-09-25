@@ -463,7 +463,7 @@ EXTRA_METRICS = [
     'Non-penalty goals per 90','xG per 90','Shots per 90','Goal conversion, %',
     'Crosses per 90','Accurate crosses, %','Dribbles per 90','Successful dribbles, %',
     'Touches in box per 90','Progressive runs per 90','Passes per 90','Accurate passes, %',
-    'xA per 90','Passes to penalty area per 90','Deep completions per 90','Smart passes per 90'
+    'xA per 90','Passes to penalty area per 90','Deep completions per 90','Smart passes per 90' Successful defensive actions per 90
 ]
 STYLE_MAP = {
     'Defensive duels per 90': {'style':'High work rate','sw':'Defensive Duels'},
