@@ -459,7 +459,8 @@ else:
    # ---------- 2) NOTES: Style / Strengths / Weaknesses ----------
 
 EXTRA_METRICS = [
-    'Defensive duels per 90','Aerial duels per 90','Aerial duels won, %',
+    'Defensive duels per 90','Aerial duels per 90','Aerial duels won, %','Offensive duels per 90',
+    'Offensive duels won, %',
     'Non-penalty goals per 90','xG per 90','Shots per 90','Goal conversion, %',
     'Crosses per 90','Accurate crosses, %','Dribbles per 90','Successful dribbles, %',
     'Touches in box per 90','Progressive runs per 90','Passes per 90','Accurate passes, %',
