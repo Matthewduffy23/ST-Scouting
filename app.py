@@ -868,7 +868,7 @@ else:
     name_h_frac = name_bbox.height / fig.bbox.height
     badge_x = NAME_X + name_w_frac + 0.010
 
-    if isinstance(role_scores, dict) and role_scores:
+if isinstance(role_scores, dict) and role_scores:
     # --- exclude "Target Man CF" from badge calculation ---
     import re
     def _norm_role(s: str) -> str:
