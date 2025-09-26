@@ -1233,82 +1233,82 @@ except Exception as e:
     st.info(f"Scatter could not be drawn: {e}")
 # ----------------------------------------------------------------------
 
-# ============================ (F) PERCENTILE CHART — TABLEAU-STYLE (Yu Gothic Semibold) ============================
-# Drop-in feature for the one-pager. Assumes: PAGE_BG, PANEL_BG, TRACK_BG, TEXT, div_color_tuple, pct_of, player_row exist.
+# ----------------- layout (wider cards, smaller middle gap) -----------------
+LEFT = 0.050
+WIDTH_L = 0.41
+MID_GAP = 0.040
+RIGHT = LEFT + WIDTH_L + MID_GAP
+WIDTH_R = 0.41
 
-# ---- styling knobs (exact as requested) ----
-PERC_FONT_NAME   = "Yu Gothic Semibold"   # titles + metric labels
-PERC_LABEL_FS    = 11                     # metric label font size
-PERC_TITLE_FS    = 22                     # section title font size
-PERC_CAPTION     = "Percentile Rank"      # single caption at the very bottom
+TOP = 0.66
+V_GAP_FRAC = 0.050
 
-# geometry
-PERC_LABEL_GUTTER = 0.255   # % of panel width reserved for labels (fixed gutter)
+# Left column
+att_bottom = bar_panel(fig, LEFT, TOP, WIDTH_L, len(ATTACKING), "Attacking",  ATTACKING)
+def_bottom = bar_panel(fig, LEFT, att_bottom - V_GAP_FRAC, WIDTH_L, len(DEFENSIVE), "Defensive", DEFENSIVE)
+
+# Right column — capture its bottom too
+pos_bottom = bar_panel(fig, RIGHT, TOP, WIDTH_R, len(POSSESSION), "Possession", POSSESSION)
+
+# ============================ (F) PERCENTILE CHART — TABLEAU-STYLE ============================
+# ---- styling knobs ----
+PERC_FONT_NAME   = "Yu Gothic Semibold"
+PERC_LABEL_FS    = 11
+PERC_TITLE_FS    = 22
+PERC_CAPTION     = "Percentile Rank"
+
+PERC_LABEL_GUTTER = 0.255
 PERC_ROW_PX       = 24
 PERC_GAP_PX       = 8
 PERC_STEP_PX      = PERC_ROW_PX + PERC_GAP_PX
 
-# helpers
 def _f_axes_bg(fig, left, bottom, width, height, face=PANEL_BG):
     ax = fig.add_axes([left, bottom, width, height])
-    ax.set_facecolor(face)
-    ax.set_xticks([]); ax.set_yticks([])
+    ax.set_facecolor(face); ax.set_xticks([]); ax.set_yticks([])
     for sp in ax.spines.values(): sp.set_visible(False)
     return ax
 
+def _f_block_h(fig, n_rows):
+    fig.canvas.draw()
+    return (n_rows * PERC_STEP_PX) / fig.bbox.height
+
 def _f_block(fig, left, bottom, width, title, rows):
-    """
-    Draw one percentile block (title + rows) and return its total height (in fig fraction).
-    rows: list[(label:str, pct:float 0..100 or nan)]
-    """
     fig.canvas.draw()
     fig_h_px = fig.bbox.height
     n = len(rows)
     h_frac = (n * PERC_STEP_PX) / fig_h_px
 
-    # background card
     _f_axes_bg(fig, left, bottom, width, h_frac)
 
-    # bar-axis (right of label gutter)
     bar_left  = left + width * PERC_LABEL_GUTTER
     bar_width = width * (1.0 - PERC_LABEL_GUTTER) - 0.004
     ax = fig.add_axes([bar_left, bottom, bar_width, h_frac])
     ax.set_facecolor(PANEL_BG)
     for sp in ax.spines.values(): sp.set_visible(False)
 
-    # axis + grid (white 10% ticks) + solid white 50% line
     ax.set_xlim(0, 100); ax.set_ylim(-0.5, n - 0.5)
     ax.set_xticks(np.arange(0, 101, 10))
     ax.set_yticks([])
     ax.grid(axis="x", linestyle="-", linewidth=0.9, color="#FFFFFF", alpha=0.75)
     ax.axvline(50, color="#FFFFFF", linestyle="-", linewidth=1.6, alpha=1.0, zorder=5)
 
-    # draw rows
     y_idx = np.arange(n)[::-1]
-    bar_h = PERC_ROW_PX / PERC_STEP_PX  # bar thickness vs track
+    bar_h = PERC_ROW_PX / PERC_STEP_PX
     for yi, (lab, p) in zip(y_idx, rows):
         v = float(np.nan_to_num(p, nan=0.0))
-
-        # row track (subtle)
-        ax.add_patch(mpatches.Rectangle((0, yi - 0.5), 100, 1.0,
-                                        facecolor=TRACK_BG, edgecolor="none", zorder=0))
-        # value bar
-        ax.add_patch(mpatches.Rectangle((0, yi - bar_h/2), v, bar_h,
-                                        facecolor=div_color_tuple(v), edgecolor="none", zorder=3))
-
-        # left gutter metric label
+        ax.add_patch(mpatches.Rectangle((0, yi - 0.5), 100, 1.0, facecolor=TRACK_BG, edgecolor="none", zorder=0))
+        ax.add_patch(mpatches.Rectangle((0, yi - bar_h/2), v, bar_h, facecolor=div_color_tuple(v), edgecolor="none", zorder=3))
         y_fig = bottom + h_frac * ((yi + 0.5) / max(1, n))
-        fig.text(left + 0.012, y_fig, lab, color=TEXT, fontsize=PERC_LABEL_FS,
+        fig.text(LEFT + 0.012, y_fig, lab, color=TEXT, fontsize=PERC_LABEL_FS,
                  fontweight="bold", fontname=PERC_FONT_NAME, ha="left", va="center")
 
-    # title (aligned with panel left, above block)
     title_y = bottom + h_frac + 0.012
     fig.text(left, title_y, title, color=TEXT, fontsize=PERC_TITLE_FS,
              fontweight="bold", fontname=PERC_FONT_NAME, ha="left", va="bottom")
 
     return h_frac
 
-# ----- assemble percentile groups (use pct_of; guard any rare columns if needed) -----
+# Build groups
 F_ATTACK = [
     ("Crosses",                         pct_of("Crosses per 90")),
     ("Crossing Accuracy %",            pct_of("Accurate crosses, %")),
@@ -1325,7 +1325,6 @@ F_ATTACK = [
     ("Successful Attacking Actions",   pct_of("Successful attacking actions per 90") if "Successful attacking actions per 90" in player_row else np.nan),
     ("Touches in Opposition Box",      pct_of("Touches in box per 90")),
 ]
-
 F_DEF = [
     ("Aerial Duels",                   pct_of("Aerial duels per 90")),
     ("Aerial Duel Success %",          pct_of("Aerial duels won, %")),
@@ -1334,7 +1333,6 @@ F_DEF = [
     ("PAdj. Interceptions",            pct_of("PAdj Interceptions")),
     ("Successful Defensive Actions",   pct_of("Successful defensive actions per 90")),
 ]
-
 F_POS = [
     ("Deep Completions",               pct_of("Deep completions per 90")),
     ("Dribbles",                       pct_of("Dribbles per 90")),
@@ -1347,27 +1345,38 @@ F_POS = [
     ("Smart Passes",                   pct_of("Smart passes per 90")),
 ]
 
-# ----- layout and draw (bottom of the page) -----
-F_LEFT   = 0.055
-F_WIDTH  = 0.89
-F_GAP    = 0.050       # vertical gap between blocks
-F_BOTTOM = 0.08        # where the lowest block starts; raise/lower if overlapping
+# Figure-aware placement: put the percentile blocks just below the lowest card
+lowest_bottom = min(def_bottom, pos_bottom)
 
-# Draw from bottom up so we can put caption at the very bottom
-# Possession (lowest)
-h_pos = _f_block(fig, F_LEFT, F_BOTTOM, F_WIDTH, "Possession", F_POS)
-# Defensive stacked above
-def_bottom = F_BOTTOM + h_pos + F_GAP
-h_def = _f_block(fig, F_LEFT, def_bottom, F_WIDTH, "Defensive", F_DEF)
-# Attacking stacked above
-att_bottom = def_bottom + h_def + F_GAP
-h_att = _f_block(fig, F_LEFT, att_bottom, F_WIDTH, "Attacking", F_ATTACK)
+# Compute required height for all three blocks + gaps
+PERC_V_GAP = 0.050
+h_att = _f_block_h(fig, len(F_ATTACK))
+h_def = _f_block_h(fig, len(F_DEF))
+h_pos = _f_block_h(fig, len(F_POS))
+total_h = h_pos + PERC_V_GAP + h_def + PERC_V_GAP + h_att
 
-# Single caption at the very bottom, centered
-fig.text(F_LEFT + F_WIDTH/2, F_BOTTOM - 0.018, PERC_CAPTION,
-        color="#FFFFFF", fontsize=11, fontweight="bold",
-        fontname=PERC_FONT_NAME, ha="center", va="top")
+# Leave a small margin above the footer; clamp to >= 0.04
+F_BOTTOM = max(0.04, lowest_bottom - total_h - 0.03)
+
+# Draw from bottom up
+h_pos_draw = _f_block(fig, LEFT, F_BOTTOM, 0.89, "Possession", F_POS)
+h_def_draw = _f_block(fig, LEFT, F_BOTTOM + h_pos_draw + PERC_V_GAP, 0.89, "Defensive", F_DEF)
+_           = _f_block(fig, LEFT, F_BOTTOM + h_pos_draw + PERC_V_GAP + h_def_draw + PERC_V_GAP, 0.89, "Attacking", F_ATTACK)
+
+# One caption centered under the percentile section
+fig.text(LEFT + 0.89/2, F_BOTTOM - 0.018, "Percentile Rank",
+        color="#FFFFFF", fontsize=11, fontweight="bold", fontname=PERC_FONT_NAME, ha="center", va="top")
 # ============================ END (F) PERCENTILE CHART ============================
+
+# ----------------- render + download -----------------
+st.pyplot(fig, use_container_width=True)
+buf = BytesIO()
+fig.savefig(buf, format="png", dpi=170, bbox_inches="tight", facecolor=fig.get_facecolor())
+st.download_button("⬇️ Download one-pager (PNG)",
+                   data=buf.getvalue(),
+                   file_name=f"{str(player_name).replace(' ','_')}_onepager.png",
+                   mime="image/png")
+
 
 
 # ----------------- (B) COMPARISON RADAR (SB-STYLE) -----------------
