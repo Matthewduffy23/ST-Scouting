@@ -34,8 +34,9 @@ except Exception:
             self.fit(X); return self.transform(X)
 
 # ----------------- PAGE -----------------
-st.set_page_config(page_title="Advanced ST Scouting System", layout="wide")
-st.title("🔎 Advanced ST Scouting System")
+st.set_page_config(page_title="Advanced Striker Scouting System", layout="wide")
+st.title("🔎 Advanced Striker Scouting System")
+st.caption("Use the sidebar to shape your pool. Each section explains what you’re seeing and why.")
 
 # ----------------- CONFIG -----------------
 INCLUDED_LEAGUES = [
@@ -81,8 +82,7 @@ FEATURES = [
     'Touches in box per 90', 'Progressive runs per 90', 'Accelerations per 90',
     'Passes per 90', 'Accurate passes, %', 'xA per 90',
     'Passes to penalty area per 90', 'Accurate passes to penalty area, %',
-    'Deep completions per 90', 'Smart passes per 90',
-]
+    'Deep completions per 90', 'Smart passes per 90', ]
 
 POLAR_METRICS = [
     "Non-penalty goals per 90","xG per 90","Shots per 90",
@@ -90,6 +90,14 @@ POLAR_METRICS = [
     "Aerial duels per 90","Aerial duels won, %","Passes per 90",
     "Accurate passes, %","xA per 90","Progressive runs per 90",
 ]
+
+# -------- Position filter (central midfielders) --------
+CM_PREFIXES = ('CF')
+
+def position_filter(pos):
+    return str(pos).strip().upper().startswith(CM_PREFIXES)
+
+# -------------------------------------------
 
 # Role buckets
 ROLES = {
@@ -107,6 +115,7 @@ ROLES = {
     'All in': {'desc': "Blend of creation + scoring; balanced all-round attacking profile.",
                'metrics': { 'xA per 90': 2, 'Dribbles per 90': 2, 'xG per 90': 3, 'Non-penalty goals per 90': 3 }}
 }
+
 
 LEAGUE_STRENGTHS = {
     'England 1.':100.00,'Italy 1.':97.14,'Spain 1.':94.29,'Germany 1.':94.29,'France 1.':91.43,
@@ -256,7 +265,7 @@ if missing_feats:
 
 # ----------------- FILTER POOL -----------------
 df_f = df[df["League"].isin(leagues_sel)].copy()
-df_f = df_f[df_f["Position"].astype(str).str.startswith(tuple([pos_text]))]
+df_f = df_f[df_f["Position"].astype(str).apply(position_filter)]
 df_f = df_f[df_f["Minutes played"].between(min_minutes, max_minutes)]
 df_f = df_f[df_f["Age"].between(min_age, max_age)]
 df_f = df_f.dropna(subset=FEATURES)
@@ -312,7 +321,7 @@ if enable_min_perf and sel_metrics:
 def fmt_cols(df_in: pd.DataFrame, score_col: str) -> pd.DataFrame:
     out = df_in.copy()
     out[score_col] = out[score_col].round(round_to).astype(int if round_to == 0 else float)
-    cols = ["Player","Team","League","Age","Contract expires","League Strength", score_col]
+    cols = ["Player","Team","League","Position", "Age","Contract expires","League Strength", score_col]
     return out[cols]
 
 def top_table(df_in: pd.DataFrame, role: str, head_n: int) -> pd.DataFrame:
@@ -463,6 +472,8 @@ for rect, v in zip(bars, vals):
 
 st.pyplot(fig, use_container_width=True)
 # ----------------- END -----------------
+
+
 
 
 # ----------------- SINGLE PLAYER ROLE PROFILE (REPLACED) -----------------
