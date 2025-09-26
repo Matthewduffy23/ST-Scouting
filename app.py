@@ -657,7 +657,7 @@ STYLE_MAP = {
         'sw': 'Aerial Duels',
     },
     'xG per 90': {
-        'style': 'Gets into good goalscoring positions,
+        'style': 'Gets into good goalscoring positions',
         'sw': 'Goal Threat',
     },
     'Shots per 90': {
