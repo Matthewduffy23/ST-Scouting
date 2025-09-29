@@ -1380,13 +1380,6 @@ else:
         else:
             ax.tick_params(left=False, labelleft=False, bottom=True, labelbottom=False)
 
-        # Gridlines (10% vertical & row separators) + strong 50% reference
-        for t in ticks:
-            ax.axvline(t, color="#FFFFFF", lw=0.9, alpha=0.10, zorder=0.15)
-        ax.axvline(50, color="#FFFFFF", lw=1.6, ls=(0, (4, 4)), alpha=0.95, zorder=0.3)
-        for ysep in range(n + 1):
-            ax.axhline(ysep - 0.5, color="#FFFFFF", lw=0.9, alpha=0.10, zorder=0.15)
-
         # Tracks, bars, and value labels (inside-left, small black)
         for i, (lab, pct, val_str) in enumerate(tuples[::-1]):  # reverse for top-first
             y = i
