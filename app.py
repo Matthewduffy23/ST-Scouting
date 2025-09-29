@@ -1234,66 +1234,54 @@ if isinstance(role_scores, dict) and role_scores:
 
 # ============================ END — WIDER PANELS, SMALLER CENTER GAP, EXTRA TOP-LEFT PADDING ============================
 
-# ====================== REPLICA PERCENTILE CHART (1800 x 800) ======================
-# EXPECTS:
-#   ATTACKING, DEFENSIVE, POSSESSION = list[ (metric_label:str, percentile:float(0..100), badge_text:str) ]
-# EXAMPLE row: ("Shots", 72.4, "2.56")
-
+# ====================== REPLICA PERCENTILE PANELS — 1000 x 800 ======================
 import numpy as np, matplotlib.pyplot as plt
 from matplotlib import ticker, patches
-import math
 
-# ---- Visual tokens (tuned to your screenshot)
-PAGE_BG      = "#0E1420"   # full canvas
-PANEL_BG     = "#141B27"   # panel fill
-GRID_MAJOR   = "#3A4454"   # 10% grid
-GRID_MINOR   = "#2A3342"   # 5% subtle
-BORDER       = "#556072"   # panel border
-TEXT         = "#FFFFFF"
-FIFTY_LINE   = "#E7EAF0"
-BADGE_BG     = "#0E1117"
+# ---- Theme (matches your screenshot)
+PAGE_BG    = "#0E1420"
+PANEL_BG   = "#141B27"
+GRID_MAJOR = "#3A4454"   # 10%
+GRID_MINOR = "#2A3342"   # 5%
+BORDER     = "#556072"
+FIFTY_LINE = "#E7EAF0"
+TEXT       = "#FFFFFF"
+PILL_BG    = "#0B0B0B"
 
-TITLE_SIZE   = 22   # “Gothic UI Semibold” in Bold (we’ll use semibold weight)
-LABEL_SIZE   = 11
-AX_SIZE      = 11
-XLABEL_SIZE  = 14
+TITLE_SIZE  = 22
+LABEL_SIZE  = 11
+TICK_SIZE   = 10
 
-# Try to use your face; falls back if missing on the host
-FONT_FAMILY  = "Gothic UI Semibold"  # change to system name you actually have, e.g. "Segoe UI Semibold"
+FONT = "Segoe UI Semibold"   # change to your exact face (e.g. "Gothic UI Semibold")
 
-def _color_ramp(pct):
-    """Red→Amber→Green ramp; pct in 0..100."""
-    p = float(np.clip(pct, 0, 100))/100.0
-    if p <= 0.5:  # red->amber
-        t = p/0.5; c1=(239,68,68); c2=(234,179,8)
-    else:         # amber->green
-        t = (p-0.5)/0.5; c1=(234,179,8); c2=(34,197,94)
-    r = tuple(((np.array(c1)+(np.array(c2)-np.array(c1))*t)/255.0).tolist())
-    return r
+def _ramp(p):
+    p = float(np.clip(p, 0, 100))/100.0
+    if p <= 0.5:
+        t=p/0.5; c1=(239,68,68); c2=(234,179,8)
+    else:
+        t=(p-0.5)/0.5; c1=(234,179,8); c2=(34,197,94)
+    c = (np.array(c1)+(np.array(c2)-np.array(c1))*t)/255.0
+    return tuple(c.tolist())
 
-def _rows_from(triples):
-    # drop NaN rows, keep order
-    out = []
+def _rows(triples):
+    out=[]
     for lab, pct, txt in triples:
-        if pct is None or not np.isfinite(pct): 
-            continue
+        if pct is None: continue
+        if not np.isfinite(pct): continue
         out.append((str(lab), float(pct), str(txt)))
     return out
 
-def render_replica_percentile_chart(attacking, defensive, possession, footer):
-    groups = [("Attacking", _rows_from(attacking)),
-              ("Defensive", _rows_from(defensive)),
-              ("Possession", _rows_from(possession))]
+def render_percentile_panels(attacking, defensive, possession, footer_text):
+    groups = [("Attacking", _rows(attacking)),
+              ("Defensive", _rows(defensive)),
+              ("Possession", _rows(possession))]
 
-    # 1800x800 at 100 dpi
-    fig = plt.figure(figsize=(18, 8), dpi=100)
+    # 1000 x 800
+    fig = plt.figure(figsize=(10, 8), dpi=100)
     fig.patch.set_facecolor(PAGE_BG)
-
-    # 3 stacked panels, shared x limits
     gs = fig.add_gridspec(3, 1, height_ratios=[1,1,1], hspace=0.28)
     axes = [fig.add_subplot(gs[i,0]) for i in range(3)]
 
-    # common x
     xticks = np.arange(0, 110, 10)
     minor  = ticker.MultipleLocator(5)
 
@@ -1304,72 +1292,73 @@ def render_replica_percentile_chart(attacking, defensive, possession, footer):
         labels = [r[0] for r in rows]
         vals   = [r[1] for r in rows]
         texts  = [r[2] for r in rows]
-        n = len(vals)
-        y = np.arange(n)[::-1]
+        n = len(vals); y = np.arange(n)[::-1]
 
         # geometry
         ax.set_xlim(0, 100)
         ax.set_ylim(-0.5, n-0.5)
         ax.set_yticks(y)
-        ax.set_yticklabels(labels, color=TEXT, fontsize=LABEL_SIZE, fontweight="semibold", family=FONT_FAMILY)
+        ax.set_yticklabels(labels, color=TEXT, fontsize=LABEL_SIZE,
+                           fontweight="semibold", family=FONT)
         ax.tick_params(axis="y", length=0)
 
-        # gridlines every 10% (major) + subtle 5% (minor)
+        # gridlines + dashed 50%
         ax.set_xticks(xticks)
         ax.xaxis.set_minor_locator(minor)
         ax.grid(True, axis="x", which="major", color=GRID_MAJOR, linewidth=1.1)
         ax.grid(True, axis="x", which="minor", color=GRID_MINOR, linewidth=0.7)
+        ax.axvline(50, color=FIFTY_LINE, lw=2.0, ls=(0,(6,6)), zorder=1)
 
-        # only bottom panel shows tick labels
-        ax.set_xticklabels([])
-
-        # faint row separators (full-width horizontal lines across each row)
+        # row separators
         for yi in y:
             ax.axhline(yi, color=GRID_MINOR, lw=0.8, zorder=0)
 
-        # dashed 50% line
-        ax.axvline(50, color=FIFTY_LINE, lw=2.0, ls=(0,(6,6)), zorder=1)
-
-        # uniform thick bars
-        bar_h = 0.72
+        # uniform bar height
+        bar_h = 0.70
         for yi, v in zip(y, vals):
-            ax.barh(yi, v, height=bar_h, color=_color_ramp(v), edgecolor="none", zorder=3)
+            ax.barh(yi, v, height=bar_h, color=_ramp(v), edgecolor="none", zorder=3)
 
-        # value “pills” on bars (white text on dark chip)
+        # small black value pills at left-inside of the bar
         for yi, v, t in zip(y, vals, texts):
-            x = max(4, min(v - 2, 98))  # readable inside bar but never off the chart
-            ax.text(x, yi, t, va="center", ha="center",
-                    fontsize=10, color=TEXT, fontweight="bold", family=FONT_FAMILY,
+            x = max(2, min(6, v*0.12 + 2))  # near the left, but inside the bar
+            ax.text(x, yi, t, va="center", ha="center", color=TEXT,
+                    fontsize=9, fontweight="bold", family=FONT,
                     bbox=dict(boxstyle="round,pad=0.18,rounding_size=0.15",
-                              facecolor=BADGE_BG, edgecolor="none"), zorder=4)
+                              facecolor=PILL_BG, edgecolor="none"),
+                    zorder=4)
 
-        # Section title (left aligned, like screenshot)
-        ax.set_title(title, loc="left", pad=12,
-                     fontsize=TITLE_SIZE, color=TEXT, fontweight="semibold", family=FONT_FAMILY)
+        # left-aligned section title
+        ax.set_title(title, loc="left", pad=10, fontsize=TITLE_SIZE,
+                     color=TEXT, fontweight="semibold", family=FONT)
 
-        # panel border rectangle to match the card outline
+        # Hide x tick labels for top & middle panels
+        ax.set_xticklabels([])
+
+        # panel border outline
         x0,x1 = ax.get_xlim(); y0,y1 = ax.get_ylim()
         ax.add_patch(patches.Rectangle((x0, y0), x1-x0, y1-y0,
                                        fill=False, lw=1.2, ec=BORDER, zorder=5, clip_on=False))
 
-    # bottom axis labels + xlabel
+    # Bottom panel: show % ticks, but NO xlabel
     bot = axes[-1]
     bot.set_xticklabels([f"{int(t)}%" for t in xticks],
-                        color=TEXT, fontsize=AX_SIZE, fontweight="semibold", family=FONT_FAMILY)
-    bot.set_xlabel("Percentile Rank", color=TEXT, fontsize=XLABEL_SIZE, fontweight="semibold", family=FONT_FAMILY, labelpad=10)
+                        color=TEXT, fontsize=TICK_SIZE,
+                        fontweight="semibold", family=FONT)
 
-    # footer centered
-    fig.text(0.5, 0.032, footer, ha="center", va="center",
-             color=TEXT, fontsize=11, fontweight="semibold", family=FONT_FAMILY)
+    # Footer (info line only)
+    fig.text(0.5, 0.032, footer_text, ha="center", va="center",
+             color=TEXT, fontsize=11, fontweight="semibold", family=FONT)
 
     return fig
 
-# ----------------- CALL IT -----------------
-# Compose a footer that matches your template exactly:
-footer = "Percentile Rank vs 24-25 Allsvenskan ST’s with > 400 minutes played"
-fig = render_replica_percentile_chart(ATTACKING, DEFENSIVE, POSSESSION, footer)
-st.pyplot(fig, use_container_width=False)  # Streamlit
-# ================================================================================ 
+# ----------------- USAGE -----------------
+# ATTACKING / DEFENSIVE / POSSESSION must exist as [(label, percentile, value_text), ...]
+# Example footer:
+# footer = "Percentile Rank vs 24-25 Allsvenskan ST’s with > 400 minutes played"
+# fig = render_percentile_panels(ATTACKING, DEFENSIVE, POSSESSION, footer)
+# st.pyplot(fig, use_container_width=False)
+# ================================================================================
+
 
 
 
