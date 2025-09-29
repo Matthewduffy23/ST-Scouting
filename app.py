@@ -1234,6 +1234,119 @@ if isinstance(role_scores, dict) and role_scores:
 
 # ============================ END — WIDER PANELS, SMALLER CENTER GAP, EXTRA TOP-LEFT PADDING ============================
 
+# --- REPLICA: STACKED PERCENTILE PANELS (Attacking, Defensive, Possession) ---
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import numpy as np
+
+def _div_color_tuple(v: float):
+    """Red → Amber → Green (0–100)."""
+    if v is None or np.isnan(v): 
+        return (0.6,0.63,0.66)
+    v = float(v)
+    if v <= 50:
+        t = v/50.0;  c1, c2 = np.array([239,68,68]),  np.array([234,179,8])
+    else:
+        t = (v-50)/50.0; c1, c2 = np.array([234,179,8]), np.array([34,197,94])
+    return tuple(((c1 + (c2-c1)*t)/255.0).astype(float))
+
+def draw_percentile_stack(attacking, defensive, possession,
+                          *, caption="Percentile Rank vs league ST's with > 400 minutes played",
+                          figsize=(12, 10)):
+    """
+    attacking/defensive/possession: list of (label:str, percentile:float, value_text:str)
+    Returns (fig) and also draws with matplotlib.
+    """
+    # ---- style tokens (match your screenshot) ----
+    PAGE_BG   = "#0a0f1c"
+    PANEL_BG  = "#11161C"
+    TRACK_BG  = "#222c3d"
+    GRID_C    = (1,1,1,0.10)     # 10% white
+    MIDLINE_C = (1,1,1,1.00)     # solid white
+    TITLE_FS  = 22
+    LABEL_FS  = 11
+    X_FS      = 12
+
+    def _panel(ax, triples, title, show_xticks=False):
+        # background
+        ax.set_facecolor(PANEL_BG)
+        ax.set_xlim(0, 100)
+        n = len(triples)
+        ax.set_ylim(-0.5, n-0.5)
+        ax.invert_yaxis()
+
+        # grid: vertical 0..100 step 10, horizontal each row
+        for x in range(0, 101, 10):
+            ax.axvline(x, color=GRID_C, lw=1, zorder=0)
+        for y in range(n):
+            ax.axhline(y, color=GRID_C, lw=1, zorder=0)
+
+        # constant white 50th percentile line
+        ax.axvline(50, color=MIDLINE_C, lw=2, ls=(0,(4,4)), zorder=1)
+
+        # tracks + bars + value text
+        bar_h = 0.55
+        for yi, (lab, pct, vtxt) in enumerate(triples):
+            # track
+            ax.add_patch(mpatches.Rectangle((0, yi-bar_h/2), 100, bar_h, facecolor=TRACK_BG, edgecolor="none", zorder=1))
+            # bar
+            p = 0 if pct is None or np.isnan(pct) else float(pct)
+            ax.add_patch(mpatches.Rectangle((0, yi-bar_h/2), p, bar_h,
+                                            facecolor=_div_color_tuple(p), edgecolor="none", zorder=2))
+            # value text (right side of bar, muted like screenshot)
+            ax.text(p+1.0, yi, vtxt, va="center", ha="left", fontsize=LABEL_FS, color="#E5E7EB", zorder=3)
+
+        # y labels
+        ax.set_yticks(range(n))
+        ax.set_yticklabels([t[0] for t in triples], fontsize=LABEL_FS, color="#E5E7EB")
+        ax.tick_params(axis="y", length=0)
+
+        # x axis
+        if show_xticks:
+            ax.set_xticks(range(0, 101, 10))
+            ax.set_xticklabels([f"{x}%" for x in range(0, 101, 10)], fontsize=X_FS, color="#E5E7EB")
+            ax.set_xlabel("Percentile Rank", fontsize=X_FS, color="#E5E7EB", labelpad=10, fontweight="bold")
+        else:
+            ax.set_xticks([])
+        # spines off
+        for s in ax.spines.values(): s.set_visible(False)
+        # title (left aligned, bold)
+        ax.text(0, -1.05, title, transform=ax.transAxes,
+                fontsize=TITLE_FS, fontweight="bold", ha="left", va="bottom", color="#FFFFFF")
+
+    # --- figure layout: 3 stacked axes with small gaps ---
+    fig = plt.figure(figsize=figsize, dpi=180)
+    fig.patch.set_facecolor(PAGE_BG)
+    gs = fig.add_gridspec(3, 1, height_ratios=[1.15, 0.9, 1.1], hspace=0.35)
+
+    ax1 = fig.add_subplot(gs[0, 0])
+    ax2 = fig.add_subplot(gs[1, 0])
+    ax3 = fig.add_subplot(gs[2, 0])
+
+    _panel(ax1, attacking, "Attacking", show_xticks=False)
+    _panel(ax2, defensive, "Defensive", show_xticks=False)
+    _panel(ax3, possession, "Possession", show_xticks=True)
+
+    # bottom caption centered
+    fig.text(0.5, 0.02, caption, ha="center", va="bottom",
+             fontsize=12, color="#E5E7EB", fontweight="bold")
+
+    return fig
+
+# ----------------- HOW TO CALL -----------------
+# You already create these lists earlier in your code:
+# ATTACKING = [(label, percentile_float, value_str), ...]
+# DEFENSIVE = [...]
+# POSSESSION = [...]
+
+fig_stack = draw_percentile_stack(
+    ATTACKING,
+    DEFENSIVE,
+    POSSESSION,
+    caption=f"Percentile Rank vs {league} ST's with > 400 minutes played",  # use your league string
+    figsize=(13, 10)  # tweak if you want
+)
+st.pyplot(fig_stack, use_container_width=True)
 
 
 
