@@ -1235,13 +1235,17 @@ if isinstance(role_scores, dict) and role_scores:
 # ============================ END — WIDER PANELS, SMALLER CENTER GAP, EXTRA TOP-LEFT PADDING ============================
 
 # ============================ (F) THREE-PANEL PERCENTILE BOARD — UNIFORM ROW HEIGHT ============================
+from io import BytesIO
+import numpy as np
+import matplotlib.pyplot as plt
+
 st.markdown("---")
 st.header("📋 Feature F — Percentile Board (uniform rows)")
 
 if player_row.empty:
     st.info("Pick a player above.")
 else:
-    # ----- assemble sections from the same calculations you already use above -----
+    # ----- assemble sections from your existing calcs -----
     ATTACKING = []
     for lab, met in [
         ("Crosses", "Crosses per 90"),
@@ -1258,7 +1262,8 @@ else:
         ("Shooting Accuracy %", "Shots on target, %"),
         ("Successful Attacking Actions", "Touches in box per 90"),
         ("Touches in Opposition Box", "Touches in box per 90"),
-    ]: ATTACKING.append((lab, float(np.nan_to_num(pct_of(met), nan=0.0)), val_of(met)[1]))
+    ]:
+        ATTACKING.append((lab, float(np.nan_to_num(pct_of(met), nan=0.0)), val_of(met)[1]))
 
     DEFENSIVE = []
     for lab, met in [
@@ -1268,7 +1273,8 @@ else:
         ("Defensive Duel Success %", "Defensive duels won, %"),
         ("PAdj. Interceptions", "PAdj Interceptions"),
         ("Successful Defensive Actions", "Successful defensive actions per 90"),
-    ]: DEFENSIVE.append((lab, float(np.nan_to_num(pct_of(met), nan=0.0)), val_of(met)[1]))
+    ]:
+        DEFENSIVE.append((lab, float(np.nan_to_num(pct_of(met), nan=0.0)), val_of(met)[1]))
 
     POSSESSION = []
     for lab, met in [
@@ -1281,23 +1287,25 @@ else:
         ("Passes to Penalty Area", "Passes to penalty area per 90"),
         ("Passes to Penalty Area Success %", "Accurate passes to penalty area, %"),
         ("Smart Passes", "Smart passes per 90"),
-    ]: POSSESSION.append((lab, float(np.nan_to_num(pct_of(met), nan=0.0)), val_of(met)[1]))
+    ]:
+        POSSESSION.append((lab, float(np.nan_to_num(pct_of(met), nan=0.0)), val_of(met)[1]))
 
     sections = [("Attacking", ATTACKING), ("Defensive", DEFENSIVE), ("Possession", POSSESSION)]
     sections = [(t, lst) for t, lst in sections if lst]
 
-    # ----- styling (dark theme) -----
+    # ----- styling -----
     PAGE_BG = "#0a0f1c"
     AX_BG   = "#0f151f"
     TRACK   = "#1c2635"
-    GRID_TX = "#c8d1e0"      # tick text
     TITLE   = "#f3f5f7"
     LABEL   = "#e8eef8"
-    SEP_CLR = "#233245"      # section divider lines
-    GRID_10 = "#4b5a70"      # 10% gridlines
-    GRID_ROW= "#2a394f"      # row separators
+
+    GRID_10 = "#ffffff"  # vertical 10% gridlines (white @ 10% alpha)
+    GRID_ROW= "#ffffff"  # row separators     (white @ 10% alpha)
+    DIVIDER = "#2f3f55"  # section borders (stronger, like Tableau)
 
     def pct_to_rgb(v):
+        v = float(v)
         if v <= 50:
             t = v/50.0;  c1, c2 = np.array([190,42,62]),  np.array([244,209,102])
         else:
@@ -1305,11 +1313,9 @@ else:
         c = (c1 + (c2-c1)*t).astype(int)
         return f"#{c[0]:02x}{c[1]:02x}{c[2]:02x}"
 
-    # ----- layout math: identical bar height across all 3 sections -----
+    # ----- layout: identical bar height across all sections -----
     total_rows = sum(len(lst) for _, lst in sections)
-
-    # Figure: 1000 x 800 px (dpi=100 => inches = px/100)
-    fig = plt.figure(figsize=(10, 8), dpi=100)
+    fig = plt.figure(figsize=(10, 8), dpi=100)  # 1000x800 px
     fig.patch.set_facecolor(PAGE_BG)
 
     left_margin  = 0.035
@@ -1319,24 +1325,22 @@ else:
     header_h     = 0.06
     gap_between  = 0.020
 
-    rows_space_total = 1 - (top_margin + bot_margin) \
-                         - header_h * len(sections) \
-                         - gap_between * (len(sections)-1)
-
+    rows_space_total = 1 - (top_margin + bot_margin) - header_h * len(sections) - gap_between * (len(sections)-1)
     row_slot = rows_space_total / max(total_rows, 1)
     BAR_FRAC = 0.8
 
-    # gutter width (consistent)
-    _probe = fig.text(0, 0, "Successful Defensive Actions", fontsize=11, fontweight="bold",
-                      color=LABEL, alpha=0)
-    fig.canvas.draw(); r = fig.canvas.get_renderer()
-    lab_w = _probe.get_window_extent(renderer=r).width / fig.bbox.width; _probe.remove()
+    # label gutter width (measured once)
+    probe = fig.text(0, 0, "Successful Defensive Actions", fontsize=11, fontweight="bold",
+                     color=LABEL, alpha=0)
+    fig.canvas.draw()
+    lab_w = probe.get_window_extent(renderer=fig.canvas.get_renderer()).width / fig.bbox.width
+    probe.remove()
     gutter = min(0.28, lab_w + 0.02)
 
     x_min, x_max = 0, 100
     ticks = np.arange(0, 101, 10)
 
-    def draw_panel(panel_top, title, tuples, draw_bottom_divider=True):
+    def draw_panel(panel_top, title, tuples, *, show_xticks=False, draw_bottom_divider=True):
         n = len(tuples)
         panel_h = header_h + n * row_slot
 
@@ -1346,72 +1350,68 @@ else:
 
         # Axis for bars
         ax = fig.add_axes([
-            left_margin + gutter,                        # x
-            panel_top - header_h - n*row_slot,          # y (bottom)
-            1 - left_margin - right_margin - gutter,    # w
-            n * row_slot                                 # h
+            left_margin + gutter,
+            panel_top - header_h - n*row_slot,
+            1 - left_margin - right_margin - gutter,
+            n * row_slot
         ])
         ax.set_facecolor(AX_BG)
         ax.set_xlim(x_min, x_max)
         ax.set_ylim(-0.5, n - 0.5)
 
-        # Remove default spines/ticks
+        # Spines/ticks
         for s in ax.spines.values(): s.set_visible(False)
-        ax.tick_params(left=False, labelleft=False, bottom=True, colors=GRID_TX)
         ax.set_xticks(ticks)
-        ax.set_xticklabels([f"{t}%" for t in ticks], fontsize=11, fontweight="700")
+        if show_xticks:
+            # bottom panel: white % labels, slightly bolder
+            ax.set_xticklabels([f"{t}%" for t in ticks], fontsize=11, fontweight="700", color="#FFFFFF")
+            ax.tick_params(left=False, labelleft=False, bottom=True, labelbottom=True)
+        else:
+            ax.tick_params(left=False, labelleft=False, bottom=True, labelbottom=False)
 
-        # Stronger 10% gridlines
+        # Gridlines — “subtle 10%”
         for t in ticks:
-            ax.axvline(t, color=GRID_10, lw=1.1, alpha=0.45, zorder=0)
+            ax.axvline(t, color=GRID_10, lw=1.0, alpha=0.10, zorder=0)  # 10% opacity
+        for ysep in np.arange(-0.5, n - 0.5, 1.0):
+            ax.axhline(ysep, color=GRID_ROW, lw=1.0, alpha=0.10, zorder=0)
 
-        # Horizontal row separators
-        for yi in np.arange(-0.5, n - 0.5, 1.0):
-            ax.axhline(yi, color=GRID_ROW, lw=1.0, alpha=0.5, zorder=0)
+        # Mid reference line (dashed)
+        ax.axvline(50, color="#FFFFFF", lw=1.6, ls=(0, (4, 4)), alpha=0.95, zorder=1)
 
-        # Mid reference line
-        ax.axvline(50, color="#e5e7eb", lw=1.6, ls=(0, (4, 4)), alpha=0.9, zorder=1)
-
-        # Draw tracks, bars, and INSIDE value labels (left)
+        # Tracks, bars, and value labels (inside-left, smaller, black, normal weight)
         for i, (lab, pct, val_str) in enumerate(tuples[::-1]):  # reverse for top-first
             y = i
-
-            # Track
-            ax.add_patch(plt.Rectangle((0, y - (BAR_FRAC/2)), 100, BAR_FRAC, color=TRACK, ec="none", zorder=0))
-
-            # Bar
+            # track
+            ax.add_patch(plt.Rectangle((0, y - (BAR_FRAC/2)), 100, BAR_FRAC, color=TRACK, ec="none", zorder=0.1))
+            # bar
             bar_w = max(0.0, min(100.0, float(pct)))
             ax.add_patch(plt.Rectangle((0, y - (BAR_FRAC/2)), bar_w, BAR_FRAC,
-                                       color=pct_to_rgb(bar_w), ec="none", zorder=2))
-
-            # Value label: left-inside the bar in BLACK; clamp so it always sits inside
-            # Position ~ 6% of the full width or at most 25% of the bar width
-            if bar_w > 2:
-                x_text = max(1.5, min(bar_w * 0.25, 6.0))
-            else:
-                x_text = 1.5
+                                       color=pct_to_rgb(bar_w), ec="none", zorder=0.9))
+            # value label just inside the bar at the left
+            x_text = max(1.2, min(bar_w * 0.22, 5.5))
             ax.text(x_text, y, val_str, ha="left", va="center",
-                    fontsize=10.5, fontweight="700", color="#0B0B0B", zorder=3)
+                    fontsize=8.5, fontweight="400", color="#0B0B0B", zorder=1.1)
 
-        # Metric labels in gutter
+        # metric labels in left gutter
         for i, (lab, _, _) in enumerate(tuples[::-1]):
             y_fig = (panel_top - header_h - n*row_slot) + ((i + 0.5) * row_slot)
             fig.text(left_margin, y_fig, lab, ha="left", va="center",
                      fontsize=12, fontweight="bold", color=LABEL)
 
-        # Section divider (bottom border line)
+        # Section divider (strong, like Tableau) — below the panel, except last
         if draw_bottom_divider:
-            y0 = panel_top - panel_h - 0.006
+            y0 = panel_top - panel_h - 0.008
             fig.lines.append(plt.Line2D([left_margin, 1 - right_margin], [y0, y0],
-                                        transform=fig.transFigure, color=SEP_CLR, lw=2.0, alpha=0.9))
+                                        transform=fig.transFigure, color=DIVIDER, lw=2.8, alpha=1.0))
         return panel_top - panel_h - gap_between
 
-    # Lay panels from top to bottom
+    # Render panels; only the last shows tick labels
     y_top = 1 - top_margin
     for idx, (title, data) in enumerate(sections):
-        y_top = draw_panel(y_top, title, data, draw_bottom_divider=(idx < len(sections)-1))
+        is_last = (idx == len(sections) - 1)
+        y_top = draw_panel(y_top, title, data, show_xticks=is_last, draw_bottom_divider=not is_last)
 
-    # Bottom axis caption (centered), same size & weight as metric labels
+    # Bottom caption — just "Percentile Rank" (same size/weight as metric labels)
     fig.text(0.5, bot_margin * 0.55, "Percentile Rank",
              ha="center", va="center", fontsize=12, fontweight="bold", color=LABEL)
 
