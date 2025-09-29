@@ -1234,176 +1234,66 @@ if isinstance(role_scores, dict) and role_scores:
 
 # ============================ END — WIDER PANELS, SMALLER CENTER GAP, EXTRA TOP-LEFT PADDING ============================
 
-# ============================ (F) THREE-PANEL PERCENTILE BOARD — UNIFORM ROW HEIGHT ============================
-st.markdown("---")
-st.header("📋 Feature F — Percentile Board (uniform rows)")
+def draw_panel(panel_top, title, tuples, *, show_xticks=False):
+    n = len(tuples)
+    panel_h = header_h + n * row_slot
 
-if player_row.empty:
-    st.info("Pick a player above.")
-else:
-    # ----- assemble sections from the same calculations you already use above -----
-    ATTACKING = []
-    for lab, met in [
-        ("Crosses", "Crosses per 90"),
-        ("Crossing Accuracy %", "Accurate crosses, %"),
-        ("Goals: Non-Penalty", "Non-penalty goals per 90"),
-        ("xG", "xG per 90"),
-        ("Conversion Rate %", "Goal conversion, %"),
-        ("Header Goals", "Head goals per 90"),
-        ("Expected Assists", "xA per 90"),
-        ("Offensive Duels", "Offensive duels per 90"),
-        ("Offensive Duel Success %", "Offensive duels won, %"),
-        ("Progressive Runs", "Progressive runs per 90"),
-        ("Shots", "Shots per 90"),
-        ("Shooting Accuracy %", "Shots on target, %"),
-        ("Successful Attacking Actions", "Touches in box per 90"),  # label to match reference footer
-        ("Touches in Opposition Box", "Touches in box per 90"),
-    ]: ATTACKING.append((lab, float(np.nan_to_num(pct_of(met), nan=0.0)), val_of(met)[1]))
+    # Title
+    fig.text(left_margin, panel_top - 0.015, title, ha="left", va="top",
+             fontsize=22, fontweight="900", color=TITLE)
 
-    DEFENSIVE = []
-    for lab, met in [
-        ("Aerial Duels", "Aerial duels per 90"),
-        ("Aerial Duel Success %", "Aerial duels won, %"),
-        ("Defensive Duels", "Defensive duels per 90"),
-        ("Defensive Duel Success %", "Defensive duels won, %"),
-        ("PAdj. Interceptions", "PAdj Interceptions"),
-        ("Successful Defensive Actions", "Successful defensive actions per 90"),
-    ]: DEFENSIVE.append((lab, float(np.nan_to_num(pct_of(met), nan=0.0)), val_of(met)[1]))
+    # Bars axis (right of gutter)
+    ax = fig.add_axes([
+        left_margin + gutter,                        # x
+        panel_top - header_h - n*row_slot,          # y (bottom)
+        1 - left_margin - right_margin - gutter,    # w
+        n * row_slot                                 # h
+    ])
+    ax.set_facecolor(AX_BG)
+    ax.set_xlim(x_min, x_max)
+    ax.set_ylim(-0.5, n - 0.5)
 
-    POSSESSION = []
-    for lab, met in [
-        ("Deep Completions", "Deep completions per 90"),
-        ("Dribbles", "Dribbles per 90"),
-        ("Dribbling Success %", "Successful dribbles, %"),
-        ("Key Passes", "Key passes per 90"),
-        ("Passes", "Passes per 90"),
-        ("Passing Accuracy %", "Accurate passes, %"),
-        ("Passes to Penalty Area", "Passes to penalty area per 90"),
-        ("Passes to Penalty Area Success %", "Accurate passes to penalty area, %"),
-        ("Smart Passes", "Smart passes per 90"),
-    ]: POSSESSION.append((lab, float(np.nan_to_num(pct_of(met), nan=0.0)), val_of(met)[1]))
+    # Spines/ticks
+    for s in ax.spines.values(): s.set_visible(False)
+    ax.set_xticks(ticks)
+    if show_xticks:
+        ax.tick_params(left=False, labelleft=False, bottom=True, labelbottom=True,
+                       colors="#FFFFFF", labelsize=9)               # white on bottom panel
+    else:
+        ax.tick_params(left=False, labelleft=False, bottom=True, labelbottom=False)
 
-    # if any section is empty, avoid crashes
-    sections = [("Attacking", ATTACKING), ("Defensive", DEFENSIVE), ("Possession", POSSESSION)]
-    sections = [(t, lst) for t, lst in sections if lst]
+    # --- Gridlines ---
+    # vertical: every 10th percentile (very subtle)
+    for t in ticks:
+        ax.axvline(t, color="#FFFFFF", lw=0.8, alpha=0.05, zorder=0.2)
+    # midline stronger at 50
+    ax.axvline(50, color="#FFFFFF", lw=1.5, ls=(0, (4, 4)), alpha=0.9, zorder=0.3)
+    # horizontal separators between rows (subtle)
+    for ysep in range(n + 1):
+        ax.axhline(ysep - 0.5, color="#FFFFFF", lw=0.8, alpha=0.05, zorder=0.2)
 
-    # ----- styling tokens (reference-matched dark theme) -----
-    PAGE_BG = "#0a0f1c"
-    AX_BG   = "#0f151f"
-    TRACK   = "#1c2635"
-    GRID_TX = "#dbe1ec"
-    TITLE   = "#f3f5f7"
-    LABEL   = "#e8eef8"
+    # --- Tracks, bars, and value labels (inside-left) ---
+    for i, (lab, pct, val_str) in enumerate(tuples[::-1]):  # reverse for top-first
+        y = i
+        # track
+        ax.add_patch(plt.Rectangle((0, y - (BAR_FRAC/2)), 100, BAR_FRAC,
+                                   color=TRACK, ec="none", zorder=0.1))
+        # bar
+        ax.add_patch(plt.Rectangle((0, y - (BAR_FRAC/2)), pct, BAR_FRAC,
+                                   color=pct_to_rgb(pct), ec="none", zorder=0.9))
+        # value INSIDE bar (left side)
+        ax.text(1.5, y, val_str, ha="left", va="center", fontsize=9.5,
+                color="#FFFFFF", zorder=1.0)  # white
 
-    def pct_to_rgb(v):
-        # same green→amber→red ramp as your one-pager
-        if v <= 50:
-            t = v/50.0;  c1, c2 = np.array([190,42,62]),  np.array([244,209,102])
-        else:
-            t = (v-50)/50.0; c1, c2 = np.array([244,209,102]), np.array([34,197,94])
-        c = (c1 + (c2-c1)*t).astype(int)
-        return f"#{c[0]:02x}{c[1]:02x}{c[2]:02x}"
+    # metric labels in gutter (uniform baseline)
+    for i, (lab, _, _) in enumerate(tuples[::-1]):
+        y_fig = (panel_top - header_h - n*row_slot) + ((i + 0.5) * row_slot)
+        fig.text(left_margin, y_fig, lab, ha="left", va="center",
+                 fontsize=11, fontweight="bold", color=LABEL)
 
-    # ----- layout math: identical bar height across all 3 sections -----
-    total_rows = sum(len(lst) for _, lst in sections)
-    # Figure: 1000x800 (inches=px/dpi). Use dpi=100 for exact px.
-    fig = plt.figure(figsize=(10, 8), dpi=100)
-    fig.patch.set_facecolor(PAGE_BG)
-
-    # inner box & spacing (fractions of figure)
-    left_margin  = 0.035
-    right_margin = 0.020
-    top_margin   = 0.035
-    bot_margin   = 0.085
-    header_h     = 0.06   # space for each section title
-    gap_between  = 0.020   # space between panels
-
-    # how much vertical space is left for rows after titles & gaps?
-    rows_space_total = 1 - (top_margin + bot_margin) \
-                         - header_h * len(sections) \
-                         - gap_between * (len(sections)-1)
-    # uniform row slot height (bar plus its row gap) across ALL sections
-    row_slot = rows_space_total / max(total_rows, 1)
-    # within a row slot, bar occupies this fraction (tight & uniform)
-    BAR_FRAC = 0.8
-
-    # label gutter (same for all panels)
-    # measure a wide label to set gutter; keep it consistent
-    _probe = fig.text(0, 0, "Successful Defensive Actions", fontsize=11, fontweight="bold", color=LABEL, alpha=0)
-    fig.canvas.draw(); r = fig.canvas.get_renderer()
-    lab_w = _probe.get_window_extent(renderer=r).width / fig.bbox.width; _probe.remove()
-    gutter = min(0.26, lab_w + 0.02)  # cap so we don't eat the chart
-
-    # common x axis domain & ticks
-    x_min, x_max = 0, 100
-    ticks = np.arange(0, 101, 10)
-
-    # helper: draw one panel precisely within top→bottom span
-    def draw_panel(panel_top, title, tuples):
-        n = len(tuples)
-        panel_h = header_h + n * row_slot
-        # title
-        fig.text(left_margin, panel_top - 0.015, title, ha="left", va="top",
-                 fontsize=22, fontweight="900", color=TITLE)
-
-        # axis for bars (right of gutter)
-        ax = fig.add_axes([
-            left_margin + gutter,                        # x
-            panel_top - header_h - n*row_slot,          # y (bottom)
-            1 - left_margin - right_margin - gutter,    # w
-            n * row_slot                                 # h
-        ])
-        ax.set_facecolor(AX_BG)
-        ax.set_xlim(x_min, x_max)
-        ax.set_ylim(-0.5, n - 0.5)
-        for spine in ax.spines.values(): spine.set_visible(False)
-        ax.tick_params(left=False, labelleft=False, bottom=True, labelbottom=True, colors=GRID_TX, labelsize=9)
-        ax.set_xticks(ticks)
-        # reference midline
-        ax.axvline(50, color=GRID_TX, lw=1.5, ls=(0, (4, 4)), alpha=0.9, zorder=2)
-
-        # draw tracks + bars
-        for i, (lab, pct, val_str) in enumerate(tuples[::-1]):  # reverse so top label is first
-            y = i
-            # track
-            ax.add_patch(plt.Rectangle((0, y - (BAR_FRAC/2)), 100, BAR_FRAC, color=TRACK, ec="none", zorder=0))
-            # bar
-            ax.add_patch(plt.Rectangle((0, y - (BAR_FRAC/2)), pct, BAR_FRAC, color=pct_to_rgb(pct), ec="none", zorder=1))
-            # value (right edge)
-            ax.text(100.8, y, val_str, ha="left", va="center", fontsize=9.5, color=GRID_TX)
-
-        # metric labels in the gutter (left aligned, uniform baseline)
-        for i, (lab, _, _) in enumerate(tuples[::-1]):
-            y_fig = (panel_top - header_h - n*row_slot) + ((i + 0.5) * row_slot)
-            fig.text(left_margin, y_fig, lab, ha="left", va="center",
-                     fontsize=11, fontweight="bold", color=LABEL)
-
-        # subtle top border
-        ax.plot([0, 1], [1, 1], transform=ax.transAxes, color="#223047", lw=0.8, alpha=0.6)
-        return panel_top - panel_h - gap_between
-
-    # lay down panels from top to bottom
-    y_top = 1 - top_margin
-    for title, data in sections:
-        y_top = draw_panel(y_top, title, data)
-
-    # footer caption (pool definition)
-    pool_leagues = ", ".join(sorted(set(leagues_pool))) if 'leagues_pool' in locals() and leagues_pool else str(player_row.iloc[0]['League'])
-    st.caption("")  # keep Streamlit spacing consistent
-    fig.text(0.5, bot_margin * 0.55,
-             f"Percentile Rank vs pool: {pool_leagues} • {min_minutes_pool}-{max_minutes_pool} mins played filter",
-             ha="center", va="center", fontsize=11, color=GRID_TX)
-
-    st.pyplot(fig, use_container_width=True)
-
-    # download
-    buf = BytesIO()
-    fig.savefig(buf, format="png", dpi=130, bbox_inches="tight", facecolor=fig.get_facecolor())
-    st.download_button("⬇️ Download Feature F (PNG)",
-                       data=buf.getvalue(),
-                       file_name=f"{str(player_name).replace(' ','_')}_featureF.png",
-                       mime="image/png")
-# ============================ END — Feature F ============================
+    # subtle top border
+    ax.plot([0, 1], [1, 1], transform=ax.transAxes, color="#223047", lw=0.8, alpha=0.6)
+    return panel_top - panel_h - gap_between
 
 
 
