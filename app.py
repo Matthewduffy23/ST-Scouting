@@ -1234,6 +1234,168 @@ if isinstance(role_scores, dict) and role_scores:
 
 # ============================ END — WIDER PANELS, SMALLER CENTER GAP, EXTRA TOP-LEFT PADDING ============================
 
+# ============================ (F) THREE-PANEL PERCENTILE DASHBOARD (1000x800) ============================
+# Replicates the attached chart layout & styling. Percentiles come from the SAME calculations used above.
+
+st.markdown("---")
+st.header("📊 Feature F — Three-Panel Percentile Dashboard")
+
+if player_row.empty:
+    st.info("Pick a player above.")
+else:
+    # -------- colors / styling (dark theme to match reference) --------
+    PAGE_BG   = "#0a0f1c"   # very dark navy
+    PANEL_BG  = "#0f141c"   # slightly lighter
+    TRACK_BG  = "#1b2432"   # bar track
+    TEXT_LBL  = "#E5E7EB"   # label text
+    SPLIT     = "#dbeafe"   # dashed 50% split line (soft white/blue)
+    TITLE_TXT = "#FFFFFF"
+
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as mpatches
+    from matplotlib.gridspec import GridSpec
+
+    # --- same color ramp function used in one-pager (red→yellow→green by percentile) ---
+    def div_color_tuple(v: float):
+        if pd.isna(v): return (0.38,0.40,0.42)
+        v = float(v)
+        if v <= 50:
+            t = v/50.0;  c1, c2 = np.array([239,68,68]),  np.array([234,179,8])
+        else:
+            t = (v-50)/50.0; c1, c2 = np.array([234,179,8]), np.array([34,197,94])
+        return tuple(((c1 + (c2-c1)*t)/255.0).astype(float))
+
+    # ---------- pull SAME metric groups (percentiles via pct_of/val_of from one-pager) ----------
+    ATTACKING = []
+    for lab, met in [
+        ("Crosses", "Crosses per 90"),
+        ("Crossing Accuracy %", "Accurate crosses, %"),
+        ("Goals: Non-Penalty", "Non-penalty goals per 90"),
+        ("xG", "xG per 90"),
+        ("Conversion Rate %", "Goal conversion, %"),
+        ("Header Goals", "Head goals per 90") if "Head goals per 90" in df.columns else None,
+        ("Expected Assists", "xA per 90"),
+        ("Offensive Duels", "Offensive duels per 90"),
+        ("Offensive Duel Success %", "Offensive duels won, %"),
+        ("Progressive Runs", "Progressive runs per 90"),
+        ("Shots", "Shots per 90"),
+        ("Shooting Accuracy %", "Shots on target, %"),
+        ("Successful Attacking Actio..", "Smart passes per 90") if "Smart passes per 90" in df.columns else None,
+        ("Touches in Opposition Box", "Touches in box per 90"),
+    ]:
+        if lab is None: 
+            continue
+        ATTACKING.append((lab, float(np.nan_to_num(pct_of(met), nan=0.0))))
+
+    DEFENSIVE = []
+    for lab, met in [
+        ("Aerial Duels", "Aerial duels per 90"),
+        ("Aerial Duel Success %", "Aerial duels won, %"),
+        ("Defensive Duels", "Defensive duels per 90"),
+        ("Defensive Duel Success %", "Defensive duels won, %"),
+        ("PAdj. Interceptions", "PAdj Interceptions"),
+        ("Successful Defensive Actio..", "Successful defensive actions per 90"),
+    ]:
+        DEFENSIVE.append((lab, float(np.nan_to_num(pct_of(met), nan=0.0))))
+
+    POSSESSION = []
+    for lab, met in [
+        ("Deep Completions", "Deep completions per 90"),
+        ("Dribbles", "Dribbles per 90"),
+        ("Dribbling Success %", "Successful dribbles, %"),
+        ("Key Passes", "Key passes per 90"),
+        ("Passes", "Passes per 90"),
+        ("Passing Accuracy %", "Accurate passes, %"),
+        ("Passes to Penalty Area", "Passes to penalty area per 90"),
+        ("Passes to Penalty Area Su..", "Accurate passes to penalty area, %") if "Accurate passes to penalty area, %" in df.columns else None,
+        ("Smart Passes", "Smart passes per 90"),
+    ]:
+        if lab is None:
+            continue
+        POSSESSION.append((lab, float(np.nan_to_num(pct_of(met), nan=0.0))))
+
+    # ---------- plotting helpers ----------
+    def draw_panel(fig, gs_cell, title, rows):
+        """Two-axes layout per row: left label rail, right bar plot."""
+        # Split the GridSpec cell into two axes: label rail (28%) and bars (72%)
+        inner = GridSpec(nrows=1, ncols=2, width_ratios=[28, 72], hspace=0.0, wspace=0.0, figure=fig, 
+                         left=gs_cell.get_position(fig).xmin, right=gs_cell.get_position(fig).xmax,
+                         bottom=gs_cell.get_position(fig).ymin, top=gs_cell.get_position(fig).ymax)
+
+        ax_lbl = fig.add_axes([inner.get_position(fig).xmin,
+                               inner.get_position(fig).ymin,
+                               (inner.get_position(fig).x1 - inner.get_position(fig).x0) * 0.28,
+                               inner.get_position(fig).height])
+        ax_bar = fig.add_axes([inner.get_position(fig).x0 + (inner.get_position(fig).width * 0.28),
+                               inner.get_position(fig).y0,
+                               inner.get_position(fig).width * 0.72,
+                               inner.get_position(fig).height])
+
+        # Backgrounds
+        for a in (ax_lbl, ax_bar):
+            a.set_facecolor(PANEL_BG)
+            a.set_xticks([]); a.set_yticks([])
+            for s in a.spines.values(): s.set_visible(False)
+
+        # Title across whole row (left aligned, sits just above panels)
+        # We place with figure-coords using the GridSpec cell top-left.
+        cell = gs_cell.get_position(fig)
+        fig.text(cell.x0, cell.y1 + 0.012, title, ha="left", va="bottom",
+                 color=TITLE_TXT, fontsize=28, fontweight="900")
+
+        # Labels rail
+        y = np.arange(len(rows))[::-1]
+        ax_lbl.set_ylim(-0.5, len(rows)-0.5)
+        ax_lbl.set_xlim(0, 1)
+        for yi, (lab, _) in zip(y, rows):
+            ax_lbl.add_patch(mpatches.Rectangle((0, yi-0.45), 1, 0.9, facecolor=PANEL_BG, edgecolor='none'))
+            ax_lbl.text(0.02, yi, lab, va="center", ha="left", color=TEXT_LBL,
+                        fontsize=16, fontweight="900")
+
+        # Bars
+        ax_bar.set_xlim(0, 100); ax_bar.set_ylim(-0.5, len(rows)-0.5)
+        BAR_H = 0.68
+        TRACK_H = 0.86
+        for yi, (_, v) in zip(y, rows):
+            # track
+            ax_bar.add_patch(mpatches.Rectangle((0, yi-TRACK_H/2), 100, TRACK_H,
+                                                facecolor=TRACK_BG, edgecolor='none', zorder=1))
+            # bar
+            ax_bar.add_patch(mpatches.Rectangle((0, yi-BAR_H/2), max(0, v), BAR_H,
+                                                facecolor=div_color_tuple(v), edgecolor='none', zorder=2))
+
+        # dashed 50% line
+        ax_bar.axvline(50, color=SPLIT, linestyle=(0,(6,6)), linewidth=2.0, zorder=0)
+
+    # ---------- Figure (1000x800) ----------
+    fig = plt.figure(figsize=(10, 8), dpi=160)
+    fig.patch.set_facecolor(PAGE_BG)
+
+    # Three equal-height rows with a little vertical breathing room
+    gs = GridSpec(3, 1, height_ratios=[1,1,1], hspace=0.22, figure=fig,
+                  left=0.03, right=0.985, top=0.96, bottom=0.09)
+
+    draw_panel(fig, gs[0], "Attacking", ATTACKING)
+    draw_panel(fig, gs[1], "Defensive", DEFENSIVE)
+    draw_panel(fig, gs[2], "Possession", POSSESSION)
+
+    # Footer caption (dynamic to reflect your pool; matches reference placement & tone)
+    pool_note_leagues = ", ".join(sorted(set(leagues_pool))) if leagues_pool else "Selected Leagues"
+    footer = f"Percentile Rank vs pool: {pool_note_leagues} • {int(min_minutes_pool)}–{int(max_minutes_pool)} mins filter"
+    fig.text(0.5, 0.045, footer, ha="center", va="center", fontsize=11, color="#C7CDD6")
+
+    st.pyplot(fig, use_container_width=True)
+
+    # Optional download
+    buf = BytesIO()
+    fig.savefig(buf, format="png", dpi=200, bbox_inches="tight", facecolor=fig.get_facecolor())
+    st.download_button("⬇️ Download Feature F (PNG)",
+                       data=buf.getvalue(),
+                       file_name=f"{str(player_name).replace(' ','_')}_featureF_dashboard.png",
+                       mime="image/png")
+# ============================ END Feature F ============================
+
+
 
 
 # ----------------- (A) SCATTERPLOT — Goals vs xG -----------------
