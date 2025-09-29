@@ -1315,8 +1315,8 @@ else:
     right_margin = 0.020
     top_margin   = 0.035
     bot_margin   = 0.085
-    header_h     = 0.065   # space for each section title
-    gap_between  = 0.030   # space between panels
+    header_h     = 0.06   # space for each section title
+    gap_between  = 0.020   # space between panels
 
     # how much vertical space is left for rows after titles & gaps?
     rows_space_total = 1 - (top_margin + bot_margin) \
@@ -1325,7 +1325,7 @@ else:
     # uniform row slot height (bar plus its row gap) across ALL sections
     row_slot = rows_space_total / max(total_rows, 1)
     # within a row slot, bar occupies this fraction (tight & uniform)
-    BAR_FRAC = 0.62
+    BAR_FRAC = 0.68
 
     # label gutter (same for all panels)
     # measure a wide label to set gutter; keep it consistent
@@ -1344,7 +1344,7 @@ else:
         panel_h = header_h + n * row_slot
         # title
         fig.text(left_margin, panel_top - 0.015, title, ha="left", va="top",
-                 fontsize=28, fontweight="900", color=TITLE)
+                 fontsize=22, fontweight="900", color=TITLE)
 
         # axis for bars (right of gutter)
         ax = fig.add_axes([
@@ -1376,7 +1376,7 @@ else:
         for i, (lab, _, _) in enumerate(tuples[::-1]):
             y_fig = (panel_top - header_h - n*row_slot) + ((i + 0.5) * row_slot)
             fig.text(left_margin, y_fig, lab, ha="left", va="center",
-                     fontsize=12, fontweight="bold", color=LABEL)
+                     fontsize=11, fontweight="bold", color=LABEL)
 
         # subtle top border
         ax.plot([0, 1], [1, 1], transform=ax.transAxes, color="#223047", lw=0.8, alpha=0.6)
