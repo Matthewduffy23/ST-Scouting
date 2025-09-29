@@ -1395,7 +1395,7 @@ else:
         if draw_bottom_divider:
             y0 = panel_top - panel_h - 0.008
             fig.lines.append(plt.Line2D([left_margin, 1 - right_margin], [y0, y0],
-                                        transform=fig.transFigure, color=DIVIDER, lw=1.5, alpha=1.0))
+                                        transform=fig.transFigure, color=DIVIDER, lw=1, alpha=1.0))
         return panel_top - panel_h - gap_between
 
     # Render panels; only the last shows tick labels
