@@ -1325,7 +1325,7 @@ else:
     # uniform row slot height (bar plus its row gap) across ALL sections
     row_slot = rows_space_total / max(total_rows, 1)
     # within a row slot, bar occupies this fraction (tight & uniform)
-    BAR_FRAC = 0.68
+    BAR_FRAC = 0.8
 
     # label gutter (same for all panels)
     # measure a wide label to set gutter; keep it consistent
