@@ -1285,7 +1285,7 @@ else:
         ("Passes", "Passes per 90"),
         ("Passing Accuracy %", "Accurate passes, %"),
         ("Passes to Penalty Area", "Passes to penalty area per 90"),
-        ("Passes to Penalty Area Success %", "Accurate passes to penalty area, %"),
+        ("Passes to Penalty Area %", "Accurate passes to penalty area, %"),
         ("Smart Passes", "Smart passes per 90"),
     ]:
         POSSESSION.append((lab, float(np.nan_to_num(pct_of(met), nan=0.0)), val_of(met)[1]))
@@ -1299,10 +1299,9 @@ else:
     TRACK   = "#1c2635"
     TITLE   = "#f3f5f7"
     LABEL   = "#e8eef8"
-
-    GRID_10 = "#ffffff"  # vertical 10% gridlines (white @ 10% alpha)
-    GRID_ROW= "#ffffff"  # row separators     (white @ 10% alpha)
-    DIVIDER = "#2f3f55"  # section borders (stronger, like Tableau)
+    GRID_10 = "#ffffff"  # vertical 10% gridlines (10% alpha)
+    GRID_ROW= "#ffffff"  # row separators      (10% alpha)
+    DIVIDER = "#2f3f55"  # section borders
 
     def pct_to_rgb(v):
         v = float(v)
@@ -1327,9 +1326,9 @@ else:
 
     rows_space_total = 1 - (top_margin + bot_margin) - header_h * len(sections) - gap_between * (len(sections)-1)
     row_slot = rows_space_total / max(total_rows, 1)
-    BAR_FRAC = 0.8
+    BAR_FRAC = 0.82
 
-    # label gutter width (measured once)
+    # label gutter width (measure once)
     probe = fig.text(0, 0, "Successful Defensive Actions", fontsize=11, fontweight="bold",
                      color=LABEL, alpha=0)
     fig.canvas.draw()
@@ -1340,13 +1339,16 @@ else:
     x_min, x_max = 0, 100
     ticks = np.arange(0, 101, 10)
 
+    # Compute the visual center of the plot area (for bottom caption)
+    x_center_plot = (left_margin + gutter + (1 - right_margin)) / 2.0
+
     def draw_panel(panel_top, title, tuples, *, show_xticks=False, draw_bottom_divider=True):
         n = len(tuples)
         panel_h = header_h + n * row_slot
 
         # Section title
         fig.text(left_margin, panel_top - 0.012, title, ha="left", va="top",
-                 fontsize=26, fontweight="900", color=TITLE)
+                 fontsize=22, fontweight="900", color=TITLE)
 
         # Axis for bars
         ax = fig.add_axes([
@@ -1363,33 +1365,32 @@ else:
         for s in ax.spines.values(): s.set_visible(False)
         ax.set_xticks(ticks)
         if show_xticks:
-            # bottom panel: white % labels, slightly bolder
             ax.set_xticklabels([f"{t}%" for t in ticks], fontsize=11, fontweight="700", color="#FFFFFF")
             ax.tick_params(left=False, labelleft=False, bottom=True, labelbottom=True)
         else:
             ax.tick_params(left=False, labelleft=False, bottom=True, labelbottom=False)
 
-        # Gridlines — “subtle 10%”
+        # Gridlines — subtle 10%
         for t in ticks:
-            ax.axvline(t, color=GRID_10, lw=1.0, alpha=0.10, zorder=0)  # 10% opacity
+            ax.axvline(t, color=GRID_10, lw=1.0, alpha=0.10, zorder=0)
         for ysep in np.arange(-0.5, n - 0.5, 1.0):
             ax.axhline(ysep, color=GRID_ROW, lw=1.0, alpha=0.10, zorder=0)
 
-        # Mid reference line (dashed)
+        # Mid reference line
         ax.axvline(50, color="#FFFFFF", lw=1.6, ls=(0, (4, 4)), alpha=0.95, zorder=1)
 
-        # Tracks, bars, and value labels (inside-left, smaller, black, normal weight)
+        # Tracks, bars, and value labels (inside-left, **closer**)
         for i, (lab, pct, val_str) in enumerate(tuples[::-1]):  # reverse for top-first
             y = i
             # track
-            ax.add_patch(plt.Rectangle((0, y - (BAR_FRAC/2)), 100, BAR_FRAC, color=TRACK, ec="none", zorder=0.1))
+            ax.add_patch(plt.Rectangle((0, y - (BAR_FRAC/2)), 100, BAR_FRAC,
+                                       color=TRACK, ec="none", zorder=0.1))
             # bar
             bar_w = max(0.0, min(100.0, float(pct)))
             ax.add_patch(plt.Rectangle((0, y - (BAR_FRAC/2)), bar_w, BAR_FRAC,
                                        color=pct_to_rgb(bar_w), ec="none", zorder=0.9))
-            # value label just inside the bar at the left
-            x_text = max(1.2, min(bar_w * 0.22, 5.5))
-            ax.text(x_text, y, val_str, ha="left", va="center",
+            # value label just inside the bar, very near the left edge
+            ax.text(1.0, y, val_str, ha="left", va="center",
                     fontsize=8.5, fontweight="400", color="#0B0B0B", zorder=1.1)
 
         # metric labels in left gutter
@@ -1398,7 +1399,7 @@ else:
             fig.text(left_margin, y_fig, lab, ha="left", va="center",
                      fontsize=12, fontweight="bold", color=LABEL)
 
-        # Section divider (strong, like Tableau) — below the panel, except last
+        # Section divider (stronger, like Tableau)
         if draw_bottom_divider:
             y0 = panel_top - panel_h - 0.008
             fig.lines.append(plt.Line2D([left_margin, 1 - right_margin], [y0, y0],
@@ -1411,8 +1412,8 @@ else:
         is_last = (idx == len(sections) - 1)
         y_top = draw_panel(y_top, title, data, show_xticks=is_last, draw_bottom_divider=not is_last)
 
-    # Bottom caption — just "Percentile Rank" (same size/weight as metric labels)
-    fig.text(0.5, bot_margin * 0.55, "Percentile Rank",
+    # Bottom caption — centered *under the plotted area*
+    fig.text(x_center_plot, bot_margin * 0.55, "Percentile Rank",
              ha="center", va="center", fontsize=12, fontweight="bold", color=LABEL)
 
     st.pyplot(fig, use_container_width=True)
