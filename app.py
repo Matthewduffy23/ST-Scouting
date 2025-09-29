@@ -1285,7 +1285,7 @@ else:
         ("Passes", "Passes per 90"),
         ("Passing Accuracy %", "Accurate passes, %"),
         ("Passes to Penalty Area", "Passes to penalty area per 90"),
-        ("Passes to Penalty Area Success %", "Accurate passes to penalty area, %"),
+        ("Passes to Penalty Area %", "Accurate passes to penalty area, %"),
         ("Smart Passes", "Smart passes per 90"),
     ]:
         POSSESSION.append((lab, float(np.nan_to_num(pct_of(met), nan=0.0)), val_of(met)[1]))
@@ -1326,7 +1326,7 @@ else:
 
     rows_space_total = 1 - (top_margin + bot_margin) - header_h * len(sections) - gap_between * (len(sections)-1)
     row_slot = rows_space_total / max(total_rows, 1)
-    BAR_FRAC = 0.8  # portion of slot occupied by bar height
+    BAR_FRAC = 0.85  # portion of slot occupied by bar height
 
     # label gutter (consistent for all panels; measured)
     probe = fig.text(0, 0, "Successful Defensive Actions", fontsize=11, fontweight="bold", color=LABEL, alpha=0)
@@ -1411,7 +1411,7 @@ else:
     # footer caption (pool definition)
     pool_leagues = ", ".join(sorted(set(leagues_pool))) if 'leagues_pool' in locals() and leagues_pool else str(player_row.iloc[0]['League'])
     fig.text(0.5, bot_margin * 0.55,
-             f"Percentile Rank vs pool: {pool_leagues} • {min_minutes_pool}-{max_minutes_pool} mins played filter",
+             f"Percentile Rank vs: {pool_leagues} • {min_minutes_pool}-{max_minutes_pool} mins played filter",
              ha="center", va="center", fontsize=11, color="#dbe1ec")
 
     st.pyplot(fig, use_container_width=True)
