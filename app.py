@@ -1299,7 +1299,7 @@ else:
     TRACK   = "#1c2635"
     TITLE   = "#f3f5f7"
     LABEL   = "#e8eef8"
-    DIVIDER = "#2f3f55"   # section borders
+    DIVIDER = "#ffffff"   # section borders
 
     # ===== Tableau Public "Red–Green–Gold Diverging" look (0→red, 50→gold, 100→green) =====
     # Stops tuned to match Tableau’s default feel (slightly desaturated, smooth blend)
@@ -1380,6 +1380,13 @@ else:
         else:
             ax.tick_params(left=False, labelleft=False, bottom=True, labelbottom=False)
 
+        # Gridlines (10% vertical & row separators) + strong 50% reference
+        for t in ticks:
+            ax.axvline(t, color="#FFFFFF", lw=0.9, alpha=0.10, zorder=0.15)
+        ax.axvline(50, color="#FFFFFF", lw=1.6, ls=(0, (4, 4)), alpha=0.95, zorder=0.3)
+        for ysep in range(n + 1):
+            ax.axhline(ysep - 0.5, color="#FFFFFF", lw=0.9, alpha=0.10, zorder=0.15)
+
         # Tracks, bars, and value labels (inside-left, small black)
         for i, (lab, pct, val_str) in enumerate(tuples[::-1]):  # reverse for top-first
             y = i
@@ -1401,7 +1408,7 @@ else:
         if draw_bottom_divider:
             y0 = panel_top - panel_h - 0.008
             fig.lines.append(plt.Line2D([left_margin, 1 - right_margin], [y0, y0],
-                                        transform=fig.transFigure, color=DIVIDER, lw=2.8, alpha=0.95))
+                                        transform=fig.transFigure, color=DIVIDER, lw=1, alpha=0.95))
         return panel_top - panel_h - gap_between
 
     # Render panels; only the last shows tick labels
@@ -1424,6 +1431,7 @@ else:
                        file_name=f"{str(player_name).replace(' ','_')}_featureF.png",
                        mime="image/png")
 # ============================ END — Feature F (Tableau palette) ============================
+
 
 
 
