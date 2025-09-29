@@ -1234,7 +1234,7 @@ if isinstance(role_scores, dict) and role_scores:
 
 # ============================ END — WIDER PANELS, SMALLER CENTER GAP, EXTRA TOP-LEFT PADDING ============================
 
-# ============================ (F) THREE-PANEL PERCENTILE BOARD — UNIFORM ROW HEIGHT ============================
+# ============================ (F) THREE-PANEL PERCENTILE BOARD — UNIFORM ROW HEIGHT (Tableau palette) ============================
 from io import BytesIO
 import numpy as np
 import matplotlib.pyplot as plt
@@ -1293,22 +1293,35 @@ else:
     sections = [("Attacking", ATTACKING), ("Defensive", DEFENSIVE), ("Possession", POSSESSION)]
     sections = [(t, lst) for t, lst in sections if lst]
 
-    # ----- styling -----
+    # ----- styling (dark Tableau-ish canvas) -----
     PAGE_BG = "#0a0f1c"
     AX_BG   = "#0f151f"
     TRACK   = "#1c2635"
     TITLE   = "#f3f5f7"
     LABEL   = "#e8eef8"
-    DIVIDER = "#ffffff"  # section borders
+    DIVIDER = "#2f3f55"   # section borders
+
+    # ===== Tableau Public "Red–Green–Gold Diverging" look (0→red, 50→gold, 100→green) =====
+    # Stops tuned to match Tableau’s default feel (slightly desaturated, smooth blend)
+    TAB_RED   = np.array([199, 54, 60], dtype=float)   # #C7363C
+    TAB_GOLD  = np.array([240, 197, 106], dtype=float) # #F0C56A
+    TAB_GREEN = np.array([61, 166, 91], dtype=float)   # #3DA65B
+
+    def _blend(c1, c2, t):
+        c = c1 + (c2 - c1) * np.clip(t, 0.0, 1.0)
+        return f"#{int(c[0]):02x}{int(c[1]):02x}{int(c[2]):02x}"
 
     def pct_to_rgb(v):
-        v = float(v)
+        """Smooth 0–100 → red→gold→green, like Tableau."""
+        v = float(np.clip(v, 0, 100))
         if v <= 50:
-            t = v/50.0;  c1, c2 = np.array([190,42,62]),  np.array([244,209,102])
+            # 0..50 : red → gold
+            t = v / 50.0
+            return _blend(TAB_RED, TAB_GOLD, t)
         else:
-            t = (v-50)/50.0; c1, c2 = np.array([244,209,102]), np.array([34,197,94])
-        c = (c1 + (c2-c1)*t).astype(int)
-        return f"#{c[0]:02x}{c[1]:02x}{c[2]:02x}"
+            # 50..100 : gold → green
+            t = (v - 50.0) / 50.0
+            return _blend(TAB_GOLD, TAB_GREEN, t)
 
     # ----- layout: identical bar height across all sections -----
     total_rows = sum(len(lst) for _, lst in sections)
@@ -1322,7 +1335,7 @@ else:
     header_h     = 0.06
     gap_between  = 0.020
 
-    rows_space_total = 1 - (top_margin + bot_margin) - header_h * len(sections) - gap_between * (len(sections)-1)
+    rows_space_total = 1 - (top_margin + bot_margin) - header_h * len(sections) - gap_between * (len(sections) - 1)
     row_slot = rows_space_total / max(total_rows, 1)
     BAR_FRAC = 0.80
 
@@ -1334,10 +1347,9 @@ else:
     probe.remove()
     gutter = min(0.28, lab_w + 0.02)
 
-    x_min, x_max = 0, 100
     ticks = np.arange(0, 101, 10)
 
-    # Compute the visual center of the plot area (for bottom caption)
+    # Compute visual center of the plot area (for bottom caption)
     x_center_plot = (left_margin + gutter + (1 - right_margin)) / 2.0
 
     def draw_panel(panel_top, title, tuples, *, show_xticks=False, draw_bottom_divider=True):
@@ -1356,10 +1368,10 @@ else:
             n * row_slot
         ])
         ax.set_facecolor(AX_BG)
-        ax.set_xlim(x_min, x_max)
+        ax.set_xlim(0, 100)
         ax.set_ylim(-0.5, n - 0.5)
 
-        # Spines/ticks
+        # Ticks & labels
         for s in ax.spines.values(): s.set_visible(False)
         ax.set_xticks(ticks)
         if show_xticks:
@@ -1368,34 +1380,35 @@ else:
         else:
             ax.tick_params(left=False, labelleft=False, bottom=True, labelbottom=False)
 
-        # Mid reference line
-        ax.axvline(50, color="#FFFFFF", lw=1.5, ls=(0, (4, 4)), alpha=0.95, zorder=1)
+        # Gridlines (10% vertical & row separators) + strong 50% reference
+        for t in ticks:
+            ax.axvline(t, color="#FFFFFF", lw=0.9, alpha=0.10, zorder=0.15)
+        ax.axvline(50, color="#FFFFFF", lw=1.6, ls=(0, (4, 4)), alpha=0.95, zorder=0.3)
+        for ysep in range(n + 1):
+            ax.axhline(ysep - 0.5, color="#FFFFFF", lw=0.9, alpha=0.10, zorder=0.15)
 
-        # Tracks, bars, and value labels (inside-left, **closer**)
+        # Tracks, bars, and value labels (inside-left, small black)
         for i, (lab, pct, val_str) in enumerate(tuples[::-1]):  # reverse for top-first
             y = i
-            # track
             ax.add_patch(plt.Rectangle((0, y - (BAR_FRAC/2)), 100, BAR_FRAC,
                                        color=TRACK, ec="none", zorder=0.1))
-            # bar
             bar_w = max(0.0, min(100.0, float(pct)))
             ax.add_patch(plt.Rectangle((0, y - (BAR_FRAC/2)), bar_w, BAR_FRAC,
                                        color=pct_to_rgb(bar_w), ec="none", zorder=0.9))
-            # value label just inside the bar, very near the left edge
             ax.text(1.0, y, val_str, ha="left", va="center",
                     fontsize=8, fontweight="400", color="#0B0B0B", zorder=1.1)
 
-        # metric labels in left gutter
+        # Metric labels in left gutter
         for i, (lab, _, _) in enumerate(tuples[::-1]):
             y_fig = (panel_top - header_h - n*row_slot) + ((i + 0.5) * row_slot)
             fig.text(left_margin, y_fig, lab, ha="left", va="center",
                      fontsize=10, fontweight="bold", color=LABEL)
 
-        # Section divider (stronger, like Tableau)
+        # Section divider (adjust thickness/opacity here if you want a different feel)
         if draw_bottom_divider:
             y0 = panel_top - panel_h - 0.008
             fig.lines.append(plt.Line2D([left_margin, 1 - right_margin], [y0, y0],
-                                        transform=fig.transFigure, color=DIVIDER, lw=1, alpha=1.0))
+                                        transform=fig.transFigure, color=DIVIDER, lw=2.8, alpha=0.95))
         return panel_top - panel_h - gap_between
 
     # Render panels; only the last shows tick labels
@@ -1404,7 +1417,7 @@ else:
         is_last = (idx == len(sections) - 1)
         y_top = draw_panel(y_top, title, data, show_xticks=is_last, draw_bottom_divider=not is_last)
 
-    # Bottom caption — centered *under the plotted area*
+    # Bottom caption — centered under plotted area
     fig.text(x_center_plot, bot_margin * 0.55, "Percentile Rank",
              ha="center", va="center", fontsize=10, fontweight="bold", color=LABEL)
 
@@ -1417,7 +1430,8 @@ else:
                        data=buf.getvalue(),
                        file_name=f"{str(player_name).replace(' ','_')}_featureF.png",
                        mime="image/png")
-# ============================ END — Feature F ============================
+# ============================ END — Feature F (Tableau palette) ============================
+
 
 
 # ----------------- (A) SCATTERPLOT — Goals vs xG -----------------
