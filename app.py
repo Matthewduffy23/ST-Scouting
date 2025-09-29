@@ -1260,7 +1260,7 @@ else:
         ("Progressive Runs", "Progressive runs per 90"),
         ("Shots", "Shots per 90"),
         ("Shooting Accuracy %", "Shots on target, %"),
-        ("Successful Attacking Actions", "Touches in box per 90"),
+        ("Successful Att. Actions", "Touches in box per 90"),
         ("Touches in Opposition Box", "Touches in box per 90"),
     ]:
         ATTACKING.append((lab, float(np.nan_to_num(pct_of(met), nan=0.0)), val_of(met)[1]))
@@ -1272,7 +1272,7 @@ else:
         ("Defensive Duels", "Defensive duels per 90"),
         ("Defensive Duel Success %", "Defensive duels won, %"),
         ("PAdj. Interceptions", "PAdj Interceptions"),
-        ("Successful Defensive Actions", "Successful defensive actions per 90"),
+        ("Successful Def. Actions", "Successful defensive actions per 90"),
     ]:
         DEFENSIVE.append((lab, float(np.nan_to_num(pct_of(met), nan=0.0)), val_of(met)[1]))
 
@@ -1299,9 +1299,7 @@ else:
     TRACK   = "#1c2635"
     TITLE   = "#f3f5f7"
     LABEL   = "#e8eef8"
-    GRID_10 = "#ffffff"  # vertical 10% gridlines (10% alpha)
-    GRID_ROW= "#ffffff"  # row separators      (10% alpha)
-    DIVIDER = "#2f3f55"  # section borders
+    DIVIDER = "#ffffff"  # section borders
 
     def pct_to_rgb(v):
         v = float(v)
@@ -1326,7 +1324,7 @@ else:
 
     rows_space_total = 1 - (top_margin + bot_margin) - header_h * len(sections) - gap_between * (len(sections)-1)
     row_slot = rows_space_total / max(total_rows, 1)
-    BAR_FRAC = 0.82
+    BAR_FRAC = 0.80
 
     # label gutter width (measure once)
     probe = fig.text(0, 0, "Successful Defensive Actions", fontsize=11, fontweight="bold",
@@ -1348,7 +1346,7 @@ else:
 
         # Section title
         fig.text(left_margin, panel_top - 0.012, title, ha="left", va="top",
-                 fontsize=22, fontweight="900", color=TITLE)
+                 fontsize=21, fontweight="900", color=TITLE)
 
         # Axis for bars
         ax = fig.add_axes([
@@ -1365,19 +1363,13 @@ else:
         for s in ax.spines.values(): s.set_visible(False)
         ax.set_xticks(ticks)
         if show_xticks:
-            ax.set_xticklabels([f"{t}%" for t in ticks], fontsize=11, fontweight="700", color="#FFFFFF")
+            ax.set_xticklabels([f"{t}%" for t in ticks], fontsize=10, fontweight="700", color="#FFFFFF")
             ax.tick_params(left=False, labelleft=False, bottom=True, labelbottom=True)
         else:
             ax.tick_params(left=False, labelleft=False, bottom=True, labelbottom=False)
 
-        # Gridlines — subtle 10%
-        for t in ticks:
-            ax.axvline(t, color=GRID_10, lw=1.0, alpha=0.10, zorder=0)
-        for ysep in np.arange(-0.5, n - 0.5, 1.0):
-            ax.axhline(ysep, color=GRID_ROW, lw=1.0, alpha=0.10, zorder=0)
-
         # Mid reference line
-        ax.axvline(50, color="#FFFFFF", lw=1.6, ls=(0, (4, 4)), alpha=0.95, zorder=1)
+        ax.axvline(50, color="#FFFFFF", lw=1.5, ls=(0, (4, 4)), alpha=0.95, zorder=1)
 
         # Tracks, bars, and value labels (inside-left, **closer**)
         for i, (lab, pct, val_str) in enumerate(tuples[::-1]):  # reverse for top-first
@@ -1414,7 +1406,7 @@ else:
 
     # Bottom caption — centered *under the plotted area*
     fig.text(x_center_plot, bot_margin * 0.55, "Percentile Rank",
-             ha="center", va="center", fontsize=12, fontweight="bold", color=LABEL)
+             ha="center", va="center", fontsize=10, fontweight="bold", color=LABEL)
 
     st.pyplot(fig, use_container_width=True)
 
