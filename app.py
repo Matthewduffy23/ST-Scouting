@@ -1235,74 +1235,87 @@ if isinstance(role_scores, dict) and role_scores:
 # ============================ END — WIDER PANELS, SMALLER CENTER GAP, EXTRA TOP-LEFT PADDING ============================
 
 
-# ============================ (F) EXACT REPLICA — 3-PANEL PERCENTILE GRAPH ============================
-# Purpose: produce the same look/structure as the uploaded image (Attacking/Defensive/Possession)
-# Inputs: uses `player_row` (1-row DataFrame), optional `pct_extra` overrides, and your color tokens if present.
+# ======================= EXACT REPLICA • 1000x800 • Gothic UI Semibold =======================
+# Drop-in block. Expects a single-row DataFrame `player_row` with your metrics and, optionally,
+# a `league` string (falls back to player_row["League"]). Produces "three_panel_replica_1000x800.png".
 
-from io import BytesIO
+import math
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+from matplotlib.font_manager import FontProperties, fontManager
 
-st.markdown("---")
+# ------------------- DATA ACCESS HELPERS -------------------
+def pct_of(dfrow, metric):
+    # 1) optional override via global pct_extra dict, 2) "<metric> Percentile" column
+    if 'pct_extra' in globals() and isinstance(pct_extra, dict) and metric in pct_extra and pd.notna(pct_extra[metric]):
+        return float(pct_extra[metric])
+    col = f"{metric} Percentile"
+    if col in dfrow.index and pd.notna(dfrow[col]): return float(dfrow[col])
+    return np.nan
 
-# ---------- fallbacks for tokens if not defined above ----------
-PAGE_BG   = globals().get("PAGE_BG",   "#0a0f1c")
-PANEL_BG  = globals().get("PANEL_BG",  "#11161C")
-TRACK_BG  = globals().get("TRACK_BG",  "#222c3d")
-TEXT      = globals().get("TEXT",      "#E5E7EB")
+def val_of(dfrow, metric):
+    if metric not in dfrow.index or pd.isna(dfrow[metric]): return np.nan, "—"
+    v = float(dfrow[metric]); m = metric.lower()
+    if "%" in metric or "percent" in m: return v, f"{int(round(v))}%"
+    if "per 90" in m or "xg" in m or "xa" in m: return v, f"{v:.2f}"
+    return v, f"{v:.2f}"
 
-# ---------- tiny helpers (reuse if already defined) ----------
-def _text_width_frac(fig, s, *, fontsize=10, weight="bold"):
-    t = fig.text(0, 0, s, fontsize=fontsize, fontweight=weight, transform=fig.transFigure, alpha=0)
-    fig.canvas.draw(); r = fig.canvas.get_renderer()
-    w_px = t.get_window_extent(renderer=r).width; t.remove()
-    return w_px / fig.bbox.width
+# ------------------- THEME / COLORS -------------------
+PAGE_BG  = "#0a0f1c"
+PANEL_BG = "#11161C"
+TRACK_BG = "#222c3d"
+TEXT     = "#E5E7EB"
 
-def div_color_tuple(v: float):
-    # red -> amber -> green diverging like your other block
+def div_color(v):
+    # red (<=50) → amber → green (>50)
     if pd.isna(v): return (0.6,0.63,0.66)
     v = float(v)
     if v <= 50:
         t = v/50.0;  c1, c2 = np.array([239,68,68]),  np.array([234,179,8])
     else:
         t = (v-50)/50.0; c1, c2 = np.array([234,179,8]), np.array([34,197,94])
-    return tuple(((c1 + (c2-c1)*t)/255.0).astype(float))
+    rgb = ((c1 + (c2-c1)*t)/255.0).astype(float)
+    return tuple(rgb)
 
-def pct_of(metric: str) -> float:
-    # allows overrides via pct_extra dict, then falls back to "<metric> Percentile" on player_row
-    if 'pct_extra' in globals() and isinstance(pct_extra, dict) and metric in pct_extra and pd.notna(pct_extra[metric]):
-        return float(pct_extra[metric])
-    col = f"{metric} Percentile"
-    if col in player_row.columns and pd.notna(player_row[col].iloc[0]):
-        return float(player_row[col].iloc[0])
-    return np.nan
+# ------------------- FONT SETUP -------------------
+# If you have the exact font file, set FONT_PATH = "/path/to/Gothic UI Semibold.ttf"
+FONT_PATH = None  # <- put your TTF/OTF path here if needed
 
-def val_of(metric: str):
-    if player_row.empty: return np.nan, "—"
-    ply = player_row.iloc[0]
-    if metric not in ply.index or pd.isna(ply[metric]): return np.nan, "—"
-    v = float(ply[metric]); m = metric.lower()
-    if "%" in metric or "percent" in m: return v, f"{int(round(v))}%"
-    if "per 90" in m or "xg" in m or "xa" in m: return v, f"{v:.2f}"
-    return v, f"{v:.2f}"
+def get_fontprops(size, weight="semibold"):
+    # Try explicit file first
+    if FONT_PATH:
+        try:
+            fp = FontProperties(fname=FONT_PATH, size=size)
+            return fp
+        except Exception:
+            pass
+    # Then try by family name
+    try:
+        return FontProperties(family="Gothic UI Semibold", size=size)
+    except Exception:
+        # fallback keeps layout even if glyphs differ
+        return FontProperties(family="DejaVu Sans", weight="semibold", size=size)
 
-# ---------- fixed-pixel bars to match the screenshot ----------
+TITLE_FP = get_fontprops(22, "semibold")  # section titles (bold look)
+LABEL_FP = get_fontprops(11, "semibold")  # metric labels
+
+# ------------------- PANEL RENDERER -------------------
 BAR_PX = 24
 GAP_PX = 6
 SEP_PX = 2
 STEP_PX = BAR_PX + GAP_PX
 
-LABEL_FS = 11
-VALUE_FS = 9
-TITLE_FS = 28   # matches the image’s big section headers
-
-GUTTER_PAD = 0.010  # a touch wider so long labels fit like the photo
+def text_width_frac(fig, s, fp):
+    t = fig.text(0, 0, s, fontproperties=fp, transform=fig.transFigure, alpha=0)
+    fig.canvas.draw(); r = fig.canvas.get_renderer()
+    w_px = t.get_window_extent(renderer=r).width; t.remove()
+    return w_px / fig.bbox.width
 
 def bar_panel(fig, left, top, width, title, triples):
     """
-    triples = [(label, percentile_float, value_text), ...]
+    triples = [(label, percentile_float, value_text), ...] (top-to-bottom order shown)
     """
     fig.canvas.draw()
     fig_px_h = fig.bbox.height
@@ -1310,76 +1323,80 @@ def bar_panel(fig, left, top, width, title, triples):
     ax_h_frac = (n_rows * STEP_PX) / fig_px_h
     bottom = top - ax_h_frac
 
-    # compute gutter width by the longest label
-    labels = [t[0] for t in triples]
-    max_label_w = max(_text_width_frac(fig, s, fontsize=LABEL_FS, weight="bold") for s in labels) if labels else 0
-    gutter_w = max_label_w + GUTTER_PAD
-
-    # background panel
+    # panel background & border (to mirror separators)
     ax_panel = fig.add_axes([left, bottom, width, ax_h_frac])
     ax_panel.set_facecolor(PANEL_BG)
+    for sp in ax_panel.spines.values(): sp.set_visible(True)
+    for k in ax_panel.spines:
+        ax_panel.spines[k].set_color("white")
+        ax_panel.spines[k].set_alpha(0.18)     # faint border like screenshot
+        ax_panel.spines[k].set_linewidth(1.0)
     ax_panel.set_xticks([]); ax_panel.set_yticks([])
-    for sp in ax_panel.spines.values(): sp.set_visible(False)
 
-    # bars axis (right of gutter)
+    labels = [t[0] for t in triples]
+    pcts   = [float(np.nan_to_num(t[1], nan=0.0)) for t in triples]
+    texts  = [t[2] for t in triples]
+
+    # gutter width based on longest label
+    max_w = max(text_width_frac(fig, s, LABEL_FP) for s in labels) if labels else 0
+    gutter_w = max_w + 0.010
+
+    # bars axis
     bar_left  = left + gutter_w
-    bar_width = max(0.001, width - gutter_w - 0.006)
+    bar_width = max(0.001, width - gutter_w - 0.008)
     ax = fig.add_axes([bar_left, bottom, bar_width, ax_h_frac])
     ax.set_facecolor(PANEL_BG)
+    ax.set_xlim(0, 100)
+    ax.set_ylim(-0.5, n_rows - 0.5)
+    ax.set_axisbelow(True)
 
-    pcts  = [float(np.nan_to_num(t[1], nan=0.0)) for t in triples]
-    texts = [t[2] for t in triples]
-    n = len(labels)
-    y_idx = np.arange(n)[::-1]  # top to bottom visually
+    # gridlines across & down, white @ 10%
+    ax.grid(which="both", axis="both", color="white", alpha=0.10, linewidth=0.8)
 
-    # normalize pixel -> axis units
+    # constant thicker 50th percentile line (solid white 100%)
+    ax.axvline(50, color="white", linewidth=2.4, zorder=5)
+
+    # fixed bar & track heights
     bar_du = BAR_PX / STEP_PX
     gap_du = GAP_PX / STEP_PX
     sep_du = SEP_PX / STEP_PX
     track_h = bar_du + gap_du - sep_du
 
-    ax.set_xlim(0, 100)
-    ax.set_ylim(-0.5, n - 0.5)
+    y_idx = np.arange(n_rows)[::-1]  # draw top-to-bottom visually
 
     # tracks
     for yi in y_idx:
         ax.add_patch(mpatches.Rectangle((0, yi - track_h/2), 100, track_h,
-                                        facecolor=TRACK_BG, edgecolor='none'))
+                                        facecolor=TRACK_BG, edgecolor="none", zorder=0))
 
-    # bars + value labels (value text sits just right of the bar, like the photo)
+    # bars + value text (value text just right of the bar; dark text like screenshot)
     for yi, v, t in zip(y_idx, pcts, texts):
         ax.add_patch(mpatches.Rectangle((0, yi - bar_du/2), v, bar_du,
-                                        facecolor=div_color_tuple(v), edgecolor='none'))
-        ax.text(1.0, yi, t, va="center", ha="left", color="#0B0B0B", fontsize=VALUE_FS, weight="700")
+                                        facecolor=div_color(v), edgecolor="none", zorder=3))
+        ax.text(101.0, yi, t, va="center", ha="left", color="#0B0B0B",
+                fontproperties=get_fontprops(10.5, "semibold"), zorder=6)
 
-    # dashed midline at 50
-    ax.axvline(50, color="#94A3B8", linestyle=":", linewidth=1.2, zorder=3)
-
-    # clean
-    for sp in ax.spines.values(): sp.set_visible(False)
+    # y tick labels off; spines faint (handled by outer panel)
+    for sp in ax.spines.values():
+        sp.set_visible(False)
     ax.tick_params(axis="both", length=0, labelsize=0)
-    ax.grid(False)
 
-    # left gutter labels
+    # left gutter metric labels
     for yi, lab in zip(y_idx, labels):
-        y_fig = bottom + ax_h_frac * ((yi + 0.5) / max(1, n))
-        fig.text(left + 0.002, y_fig, lab, color=TEXT, fontsize=LABEL_FS, fontweight="bold",
-                 va="center", ha="left")
+        y_fig = bottom + ax_h_frac * ((yi + 0.5) / max(1, n_rows))
+        fig.text(left + 0.003, y_fig, lab, color=TEXT, fontproperties=LABEL_FP, va="center", ha="left")
 
-    # section title (large, like image)
-    fig.text(left, bottom + ax_h_frac + 0.014, title, color=TEXT, fontsize=TITLE_FS, fontweight="900",
-             ha="left", va="bottom")
+    # section title
+    fig.text(left, bottom + ax_h_frac + 0.012, title, color=TEXT, fontproperties=TITLE_FP, ha="left", va="bottom")
 
-    # a faint separator under the title (mirrors the screenshot’s faint top border)
-    ax.plot([0, 1], [1, 1], transform=ax.transAxes, color="#94A3B8", linewidth=0.8, alpha=0.35)
+    # faint inner separator line under title (like photo)
+    ax.plot([0, 1], [1, 1], transform=ax.transAxes, color="white", linewidth=0.9, alpha=0.18)
 
     return bottom
 
-# ---------- build the exact groups/labels to mirror the photo ----------
-if player_row.empty:
-    st.info("Pick a player above.")
-else:
-    # Create the same groupings/titles as the image
+# ------------------- MAIN: BUILD GROUPS & DRAW -------------------
+def render_three_panel_replica(player_row: pd.Series, out_path="three_panel_replica_1000x800.png"):
+    # Build lists that mirror your screenshot exactly
     ATTACKING = []
     for lab, met in [
         ("Crosses", "Crosses per 90"),
@@ -1396,7 +1413,7 @@ else:
         ("Shooting Accuracy %", "Shots on target, %"),
         ("Successful Attacking Actio..", "Successful attacking actions per 90"),
         ("Touches in Opposition Box", "Touches in box per 90"),
-    ]: ATTACKING.append((lab, pct_of(met), val_of(met)[1]))
+    ]: ATTACKING.append((lab, pct_of(player_row, met), val_of(player_row, met)[1]))
 
     DEFENSIVE = []
     for lab, met in [
@@ -1406,7 +1423,7 @@ else:
         ("Defensive Duel Success %", "Defensive duels won, %"),
         ("PAdj. Interceptions", "PAdj Interceptions"),
         ("Successful Defensive Actio..", "Successful defensive actions per 90"),
-    ]: DEFENSIVE.append((lab, pct_of(met), val_of(met)[1]))
+    ]: DEFENSIVE.append((lab, pct_of(player_row, met), val_of(player_row, met)[1]))
 
     POSSESSION = []
     for lab, met in [
@@ -1419,36 +1436,52 @@ else:
         ("Passes to Penalty Area", "Passes to penalty area per 90"),
         ("Passes to Penalty Area Su..", "Accurate passes to penalty area, %"),
         ("Smart Passes", "Smart passes per 90"),
-    ]: POSSESSION.append((lab, pct_of(met), val_of(met)[1]))
+    ]: POSSESSION.append((lab, pct_of(player_row, met), val_of(player_row, met)[1]))
 
-    # ---------- layout that matches the PNG ----------
-    W, H = 1500, 1080
-    fig = plt.figure(figsize=(W/100, H/100), dpi=100)
+    league = (
+        str(player_row.get("League", "the league"))
+        if isinstance(player_row, pd.Series) else "the league"
+    )
+
+    # Canvas: 1000x800 @ 100 dpi
+    fig = plt.figure(figsize=(10, 8), dpi=100)
     fig.patch.set_facecolor(PAGE_BG)
 
-    LEFT = 0.045
-    WIDTH_L = 0.44
-    MID_GAP = 0.035
+    # layout tuned to match the photo proportions at this size
+    LEFT = 0.055
+    WIDTH_L = 0.43
+    MID_GAP = 0.040
     RIGHT = LEFT + WIDTH_L + MID_GAP
-    WIDTH_R = 0.44
+    WIDTH_R = 0.43
 
     TOP = 0.86
-    V_GAP_FRAC = 0.060
+    V_GAP = 0.070
 
-    # Left column panels
-    bottom_att = bar_panel(fig, LEFT, TOP, WIDTH_L, "Attacking", ATTACKING)
-    bottom_def = bar_panel(fig, LEFT, bottom_att - V_GAP_FRAC, WIDTH_L, "Defensive", DEFENSIVE)
+    b_att = bar_panel(fig, LEFT, TOP, WIDTH_L, "Attacking", ATTACKING)
+    b_def = bar_panel(fig, LEFT, b_att - V_GAP, WIDTH_L, "Defensive", DEFENSIVE)
+    _    = bar_panel(fig, RIGHT, TOP, WIDTH_R, "Possession", POSSESSION)
 
-    # Right column panel
-    _ = bar_panel(fig, RIGHT, TOP, WIDTH_R, "Possession", POSSESSION)
+    # bottom caption
+    caption = f"Percentile Rank vs {league} ST's with > 400 minutes played"
+    fig.text(0.5, 0.045, caption, color=TEXT, fontproperties=get_fontprops(12, "semibold"),
+             ha="center", va="center")
 
-    # render + export
-    st.pyplot(fig, use_container_width=True)
-    buf = BytesIO()
-    fig.savefig(buf, format="png", dpi=170, bbox_inches="tight", facecolor=fig.get_facecolor())
-    st.download_button("⬇️ Download replica (PNG)", data=buf.getvalue(),
-                       file_name="three_panel_replica.png", mime="image/png")
-# ============================ END — EXACT REPLICA ============================
+    # save
+    fig.savefig(out_path, dpi=100, bbox_inches="tight", facecolor=fig.get_facecolor())
+    plt.close(fig)
+    return out_path
+
+# ------------------- USAGE EXAMPLE -------------------
+# Assumes you have a one-row DataFrame named `player_row` already.
+# If you are in Streamlit, call within your page logic; otherwise run in Python.
+
+# Example guard:
+if 'player_row' in globals() and isinstance(player_row, pd.DataFrame) and not player_row.empty:
+    path = render_three_panel_replica(player_row.iloc[0])
+    print(f"Saved: {path}")
+else:
+    print("Provide a one-row DataFrame `player_row` with the needed metrics & percentiles.")
+# ======================= END • EXACT REPLICA =======================
 
 
 # ----------------- (A) SCATTERPLOT — Goals vs xG -----------------
