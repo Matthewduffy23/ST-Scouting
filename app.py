@@ -1234,7 +1234,7 @@ if isinstance(role_scores, dict) and role_scores:
 
 # ============================ END — WIDER PANELS, SMALLER CENTER GAP, EXTRA TOP-LEFT PADDING ============================
 
-# ============================ (F) THREE-PANEL PERCENTILE DASHBOARD (1000x800, FIXED) ============================
+# ============================ (F) THREE-PANEL PERCENTILE DASHBOARD — UNIFORM ROW SIZE (1000x800) ============================
 st.markdown("---")
 st.header("📊 Feature F — Three-Panel Percentile Dashboard")
 
@@ -1253,6 +1253,10 @@ else:
     TRACK_BG  = "#1b2432"
     TEXT_LBL  = "#E5E7EB"
     SPLIT     = "#dbeafe"
+
+    # smaller fonts (requested)
+    TITLE_FS  = 24
+    LABEL_FS  = 13.5   # metric labels (smaller than before)
 
     def div_color_tuple(v: float):
         if pd.isna(v): return (0.38,0.40,0.42)
@@ -1310,15 +1314,17 @@ else:
         if lab is not None:
             POSSESSION.append((lab, float(np.nan_to_num(pct_of(met), nan=0.0))))
 
-    # ---- corrected panel drawer (uses gs_cell bbox directly) ----
+    # ---- uniform row sizing across panels ----
+    ROWS_MAX = max(len(ATTACKING), len(DEFENSIVE), len(POSSESSION))
+
     def draw_panel(fig, gs_cell, title, rows):
         # bbox of this row
         bbox = gs_cell.get_position(fig)
         left, bottom, width, height = bbox.x0, bbox.y0, bbox.width, bbox.height
 
-        # split into 28% label rail and 72% bars area
-        lbl_w = width * 0.28
-        bar_w = width * 0.72
+        # split into label-rail and bars area
+        lbl_w = width * 0.30   # a touch wider for smaller font readability
+        bar_w = width * 0.70
 
         ax_lbl = fig.add_axes([left, bottom, lbl_w, height])
         ax_bar = fig.add_axes([left + lbl_w, bottom, bar_w, height])
@@ -1329,35 +1335,46 @@ else:
             a.set_xticks([]); a.set_yticks([])
             for s in a.spines.values(): s.set_visible(False)
 
-        # section title just above this row
-        fig.text(left, bottom + height + 0.012, title, ha="left", va="bottom",
-                 color="#FFFFFF", fontsize=28, fontweight="900")
+        # section title
+        fig.text(left, bottom + height + 0.010, title, ha="left", va="bottom",
+                 color="#FFFFFF", fontsize=TITLE_FS, fontweight="900")
+
+        # UNIFORM y-grid: every panel spans 0..ROWS_MAX-1
+        ax_lbl.set_ylim(-0.5, ROWS_MAX - 0.5); ax_lbl.set_xlim(0, 1)
+        ax_bar.set_ylim(-0.5, ROWS_MAX - 0.5); ax_bar.set_xlim(0, 100)
+
+        # place this panel's rows packed from the top so all bars share the same height & gaps
+        start = ROWS_MAX - len(rows)
+        y_pos = (np.arange(len(rows))[::-1] + start)
+
+        # smaller gaps -> make bars fill more of the row pitch
+        TRACK_H = 0.92  # was ~0.86
+        BAR_H   = 0.78  # was ~0.68
 
         # label rail
-        y = np.arange(len(rows))[::-1]
-        ax_lbl.set_ylim(-0.5, len(rows)-0.5); ax_lbl.set_xlim(0, 1)
-        for yi, (lab, _) in zip(y, rows):
-            ax_lbl.add_patch(mpatches.Rectangle((0, yi-0.45), 1, 0.9, facecolor=PANEL_BG, edgecolor='none'))
+        for yi, (lab, _) in zip(y_pos, rows):
+            ax_lbl.add_patch(mpatches.Rectangle((0, yi-0.5), 1, 1.0, facecolor=PANEL_BG, edgecolor='none'))
             ax_lbl.text(0.02, yi, lab, va="center", ha="left", color=TEXT_LBL,
-                        fontsize=16, fontweight="900")
+                        fontsize=LABEL_FS, fontweight="900")
 
-        # bars
-        ax_bar.set_xlim(0, 100); ax_bar.set_ylim(-0.5, len(rows)-0.5)
-        BAR_H = 0.68; TRACK_H = 0.86
-        for yi, (_, v) in zip(y, rows):
+        # bars (uniform height across panels)
+        for yi, (_, v) in zip(y_pos, rows):
             ax_bar.add_patch(mpatches.Rectangle((0, yi-TRACK_H/2), 100, TRACK_H,
                                                 facecolor=TRACK_BG, edgecolor='none', zorder=1))
             ax_bar.add_patch(mpatches.Rectangle((0, yi-BAR_H/2), max(0, v), BAR_H,
                                                 facecolor=div_color_tuple(v), edgecolor='none', zorder=2))
+
         # dashed 50% split
-        ax_bar.axvline(50, color=SPLIT, linestyle=(0,(6,6)), linewidth=2.0, zorder=0)
+        ax_bar.axvline(50, color=SPLIT, linestyle=(0,(6,6)), linewidth=1.8, zorder=0)
 
     # ---- figure (1000x800) ----
     fig = plt.figure(figsize=(10, 8), dpi=160)
     fig.patch.set_facecolor(PAGE_BG)
 
-    gs = GridSpec(3, 1, height_ratios=[1,1,1], hspace=0.22, figure=fig,
-                  left=0.03, right=0.985, top=0.96, bottom=0.09)
+    gs = GridSpec(
+        3, 1, height_ratios=[1,1,1], hspace=0.20, figure=fig,
+        left=0.03, right=0.985, top=0.965, bottom=0.10
+    )
 
     draw_panel(fig, gs[0], "Attacking", ATTACKING)
     draw_panel(fig, gs[1], "Defensive", DEFENSIVE)
@@ -1366,7 +1383,7 @@ else:
     # footer (pool context)
     pool_note_leagues = ", ".join(sorted(set(leagues_pool))) if leagues_pool else "Selected Leagues"
     footer = f"Percentile Rank vs pool: {pool_note_leagues} • {int(min_minutes_pool)}–{int(max_minutes_pool)} mins filter"
-    fig.text(0.5, 0.045, footer, ha="center", va="center", fontsize=11, color="#C7CDD6")
+    fig.text(0.5, 0.045, footer, ha="center", va="center", fontsize=10.5, color="#C7CDD6")
 
     st.pyplot(fig, use_container_width=True)
 
