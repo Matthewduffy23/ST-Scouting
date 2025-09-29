@@ -1234,28 +1234,26 @@ if isinstance(role_scores, dict) and role_scores:
 
 # ============================ END — WIDER PANELS, SMALLER CENTER GAP, EXTRA TOP-LEFT PADDING ============================
 
-# ============================ (F) THREE-PANEL PERCENTILE DASHBOARD (1000x800) ============================
-# Replicates the attached chart layout & styling. Percentiles come from the SAME calculations used above.
-
+# ============================ (F) THREE-PANEL PERCENTILE DASHBOARD (1000x800, FIXED) ============================
 st.markdown("---")
 st.header("📊 Feature F — Three-Panel Percentile Dashboard")
 
 if player_row.empty:
     st.info("Pick a player above.")
 else:
-    # -------- colors / styling (dark theme to match reference) --------
-    PAGE_BG   = "#0a0f1c"   # very dark navy
-    PANEL_BG  = "#0f141c"   # slightly lighter
-    TRACK_BG  = "#1b2432"   # bar track
-    TEXT_LBL  = "#E5E7EB"   # label text
-    SPLIT     = "#dbeafe"   # dashed 50% split line (soft white/blue)
-    TITLE_TXT = "#FFFFFF"
-
+    import numpy as np
     import matplotlib.pyplot as plt
     import matplotlib.patches as mpatches
     from matplotlib.gridspec import GridSpec
+    from io import BytesIO
 
-    # --- same color ramp function used in one-pager (red→yellow→green by percentile) ---
+    # --- theme to match reference ---
+    PAGE_BG   = "#0a0f1c"
+    PANEL_BG  = "#0f141c"
+    TRACK_BG  = "#1b2432"
+    TEXT_LBL  = "#E5E7EB"
+    SPLIT     = "#dbeafe"
+
     def div_color_tuple(v: float):
         if pd.isna(v): return (0.38,0.40,0.42)
         v = float(v)
@@ -1265,7 +1263,7 @@ else:
             t = (v-50)/50.0; c1, c2 = np.array([234,179,8]), np.array([34,197,94])
         return tuple(((c1 + (c2-c1)*t)/255.0).astype(float))
 
-    # ---------- pull SAME metric groups (percentiles via pct_of/val_of from one-pager) ----------
+    # ----- metric groups (percentiles reuse pct_of from one-pager) -----
     ATTACKING = []
     for lab, met in [
         ("Crosses", "Crosses per 90"),
@@ -1283,9 +1281,8 @@ else:
         ("Successful Attacking Actio..", "Smart passes per 90") if "Smart passes per 90" in df.columns else None,
         ("Touches in Opposition Box", "Touches in box per 90"),
     ]:
-        if lab is None: 
-            continue
-        ATTACKING.append((lab, float(np.nan_to_num(pct_of(met), nan=0.0))))
+        if lab is not None:
+            ATTACKING.append((lab, float(np.nan_to_num(pct_of(met), nan=0.0))))
 
     DEFENSIVE = []
     for lab, met in [
@@ -1310,68 +1307,55 @@ else:
         ("Passes to Penalty Area Su..", "Accurate passes to penalty area, %") if "Accurate passes to penalty area, %" in df.columns else None,
         ("Smart Passes", "Smart passes per 90"),
     ]:
-        if lab is None:
-            continue
-        POSSESSION.append((lab, float(np.nan_to_num(pct_of(met), nan=0.0))))
+        if lab is not None:
+            POSSESSION.append((lab, float(np.nan_to_num(pct_of(met), nan=0.0))))
 
-    # ---------- plotting helpers ----------
+    # ---- corrected panel drawer (uses gs_cell bbox directly) ----
     def draw_panel(fig, gs_cell, title, rows):
-        """Two-axes layout per row: left label rail, right bar plot."""
-        # Split the GridSpec cell into two axes: label rail (28%) and bars (72%)
-        inner = GridSpec(nrows=1, ncols=2, width_ratios=[28, 72], hspace=0.0, wspace=0.0, figure=fig, 
-                         left=gs_cell.get_position(fig).xmin, right=gs_cell.get_position(fig).xmax,
-                         bottom=gs_cell.get_position(fig).ymin, top=gs_cell.get_position(fig).ymax)
+        # bbox of this row
+        bbox = gs_cell.get_position(fig)
+        left, bottom, width, height = bbox.x0, bbox.y0, bbox.width, bbox.height
 
-        ax_lbl = fig.add_axes([inner.get_position(fig).xmin,
-                               inner.get_position(fig).ymin,
-                               (inner.get_position(fig).x1 - inner.get_position(fig).x0) * 0.28,
-                               inner.get_position(fig).height])
-        ax_bar = fig.add_axes([inner.get_position(fig).x0 + (inner.get_position(fig).width * 0.28),
-                               inner.get_position(fig).y0,
-                               inner.get_position(fig).width * 0.72,
-                               inner.get_position(fig).height])
+        # split into 28% label rail and 72% bars area
+        lbl_w = width * 0.28
+        bar_w = width * 0.72
 
-        # Backgrounds
+        ax_lbl = fig.add_axes([left, bottom, lbl_w, height])
+        ax_bar = fig.add_axes([left + lbl_w, bottom, bar_w, height])
+
+        # backgrounds & spines
         for a in (ax_lbl, ax_bar):
             a.set_facecolor(PANEL_BG)
             a.set_xticks([]); a.set_yticks([])
             for s in a.spines.values(): s.set_visible(False)
 
-        # Title across whole row (left aligned, sits just above panels)
-        # We place with figure-coords using the GridSpec cell top-left.
-        cell = gs_cell.get_position(fig)
-        fig.text(cell.x0, cell.y1 + 0.012, title, ha="left", va="bottom",
-                 color=TITLE_TXT, fontsize=28, fontweight="900")
+        # section title just above this row
+        fig.text(left, bottom + height + 0.012, title, ha="left", va="bottom",
+                 color="#FFFFFF", fontsize=28, fontweight="900")
 
-        # Labels rail
+        # label rail
         y = np.arange(len(rows))[::-1]
-        ax_lbl.set_ylim(-0.5, len(rows)-0.5)
-        ax_lbl.set_xlim(0, 1)
+        ax_lbl.set_ylim(-0.5, len(rows)-0.5); ax_lbl.set_xlim(0, 1)
         for yi, (lab, _) in zip(y, rows):
             ax_lbl.add_patch(mpatches.Rectangle((0, yi-0.45), 1, 0.9, facecolor=PANEL_BG, edgecolor='none'))
             ax_lbl.text(0.02, yi, lab, va="center", ha="left", color=TEXT_LBL,
                         fontsize=16, fontweight="900")
 
-        # Bars
+        # bars
         ax_bar.set_xlim(0, 100); ax_bar.set_ylim(-0.5, len(rows)-0.5)
-        BAR_H = 0.68
-        TRACK_H = 0.86
+        BAR_H = 0.68; TRACK_H = 0.86
         for yi, (_, v) in zip(y, rows):
-            # track
             ax_bar.add_patch(mpatches.Rectangle((0, yi-TRACK_H/2), 100, TRACK_H,
                                                 facecolor=TRACK_BG, edgecolor='none', zorder=1))
-            # bar
             ax_bar.add_patch(mpatches.Rectangle((0, yi-BAR_H/2), max(0, v), BAR_H,
                                                 facecolor=div_color_tuple(v), edgecolor='none', zorder=2))
-
-        # dashed 50% line
+        # dashed 50% split
         ax_bar.axvline(50, color=SPLIT, linestyle=(0,(6,6)), linewidth=2.0, zorder=0)
 
-    # ---------- Figure (1000x800) ----------
+    # ---- figure (1000x800) ----
     fig = plt.figure(figsize=(10, 8), dpi=160)
     fig.patch.set_facecolor(PAGE_BG)
 
-    # Three equal-height rows with a little vertical breathing room
     gs = GridSpec(3, 1, height_ratios=[1,1,1], hspace=0.22, figure=fig,
                   left=0.03, right=0.985, top=0.96, bottom=0.09)
 
@@ -1379,14 +1363,14 @@ else:
     draw_panel(fig, gs[1], "Defensive", DEFENSIVE)
     draw_panel(fig, gs[2], "Possession", POSSESSION)
 
-    # Footer caption (dynamic to reflect your pool; matches reference placement & tone)
+    # footer (pool context)
     pool_note_leagues = ", ".join(sorted(set(leagues_pool))) if leagues_pool else "Selected Leagues"
     footer = f"Percentile Rank vs pool: {pool_note_leagues} • {int(min_minutes_pool)}–{int(max_minutes_pool)} mins filter"
     fig.text(0.5, 0.045, footer, ha="center", va="center", fontsize=11, color="#C7CDD6")
 
     st.pyplot(fig, use_container_width=True)
 
-    # Optional download
+    # download
     buf = BytesIO()
     fig.savefig(buf, format="png", dpi=200, bbox_inches="tight", facecolor=fig.get_facecolor())
     st.download_button("⬇️ Download Feature F (PNG)",
