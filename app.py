@@ -1234,188 +1234,175 @@ if isinstance(role_scores, dict) and role_scores:
 
 # ============================ END — WIDER PANELS, SMALLER CENTER GAP, EXTRA TOP-LEFT PADDING ============================
 
-# ======================= REPLICA PERCENTILE CHART (drop-in) =======================
-# Renders 3 stacked panels (Attacking / Defensive / Possession) with:
-# - uniform thick bars (same height)
-# - dark theme, 10% gridlines, dashed 50% reference
-# - section titles + separators
-# - value labels shown on the colored bars (from val_of)
-#
-# Inputs expected to exist in the file:
-#   - pct_of(metric: str) -> float 0..100 or NaN  (you already defined)
-#   - val_of(metric: str) -> (float_value, pretty_str)  (you already defined)
-#   - st (streamlit) to display
-# ================================================================================
+# ==== REPLICA PERCENTILE CHART (exact styling) =================================
+import matplotlib.pyplot as plt
+from matplotlib import gridspec
+from matplotlib.ticker import MultipleLocator, FormatStrFormatter
 
-def _replica_color(v):
-    """Green↔Yellow↔Orange↔Red gradient across 0..100, tuned to look like the example."""
-    v = 0 if v is None or np.isnan(v) else float(v)
-    # stops: 0=red, 50=yellow, 100=green
-    if v <= 50:
-        t = v/50.0
-        c1, c2 = np.array([239, 68, 68]), np.array([234, 179, 8])     # red -> yellow
-    else:
-        t = (v-50)/50.0
-        c1, c2 = np.array([234, 179, 8]), np.array([34, 197, 94])     # yellow -> green
-    rgb = (c1 + (c2 - c1) * t) / 255.0
-    return tuple(rgb.tolist())
+def _segui():
+    # Prefer Segoe UI Semibold (close match to Gothic UI Semibold); fallbacks included.
+    return {"family":["Segoe UI Semibold","Segoe UI","Inter","SF Pro Text","Helvetica Neue","Arial"],
+            "weight":"bold"}
 
-def _panel(ax, rows, title, *, show_xlabel=False):
+def _pct_color(p):
+    # red → amber → green like your reference
+    p = float(max(0,min(100,p)))/100.0
+    if p < 0.5:   # red -> amber
+        t = p/0.5
+        c1 = (0.88,0.27,0.27); c2 = (0.90,0.75,0.20)
+    else:         # amber -> green
+        t = (p-0.5)/0.5
+        c1 = (0.90,0.75,0.20); c2 = (0.20,0.75,0.30)
+    return tuple(c1[i] + (c2[i]-c1[i])*t for i in range(3))
+
+def draw_replica_percentiles(sections, value_labels=None, footer_note=""):
     """
-    rows: list of (label:str, percentile:float|nan, value_text:str)
-          value_text can be '—' to skip
+    sections: list of tuples -> [("Attacking", [("Crosses", pct, rawtxt), ...]), ("Defensive", [...]), ...]
+              pct is 0..100; rawtxt (optional) overlays small text on the bar.
+    value_labels: if True/False per panel; or None -> show when rawtxt provided.
+    footer_note: string under the bottom axis (pool + minutes text etc.)
     """
-    # --- layout
-    labels = [r[0] for r in rows]
-    vals   = [0 if (r[1] is None or np.isnan(r[1])) else float(r[1]) for r in rows]
-    vtext  = [r[2] for r in rows]
-    n = len(rows)
+    PAGE = "#0b111b"; AXBG="#202734"; GRID="#3a4354"; GRID_H="#2c3444"; TICK="#e5e7eb"
+    fig = plt.figure(figsize=(14.0, 8.6), dpi=220)
+    fig.patch.set_facecolor(PAGE)
+    gs  = gridspec.GridSpec(len(sections), 1, height_ratios=[len(p[1]) for p in sections], hspace=0.26)
 
-    ax.set_facecolor("#121622")
-    ax.set_xlim(0, 100)
-    ax.set_ylim(-0.5, n-0.5)
-    ax.invert_yaxis()  # top row first
-    # ticks & grid
-    ax.set_xticks(np.arange(0, 101, 10))
-    ax.set_yticks(np.arange(n))
-    ax.set_yticklabels(labels, fontsize=13, fontweight="800", color="white")
-    ax.tick_params(axis="x", colors="#c8ceda", labelsize=12)
-    ax.tick_params(axis="y", length=0)
-    ax.grid(True, axis="x", color="#3a4154", linewidth=1.0)
-    # 50% reference
-    ax.axvline(50, color="white", linestyle=(0,(4,4)), linewidth=2.0, alpha=0.9, zorder=1)
+    # shared x, 0..100
+    xmin, xmax = 0, 100
+    bottom_ax = None
 
-    # Bars (uniform height)
-    bar_h = 0.68                      # same height for every row
-    for i, (pct, txt) in enumerate(zip(vals, vtext)):
-        # track
-        ax.add_patch(plt.Rectangle((0, i-bar_h/2), 100, bar_h,
-                                   facecolor="#1f2536", edgecolor="#2a3146", linewidth=1.0, zorder=1))
-        # filled part
-        ax.add_patch(plt.Rectangle((0, i-bar_h/2), pct, bar_h,
-                                   facecolor=_replica_color(pct), edgecolor="none", zorder=2))
-        # value label (right end of colored bar)
-        if isinstance(txt, str) and txt != "—" and pct > 2:
-            ax.text(min(pct, 98), i, txt, va="center", ha="right",
-                    fontsize=12, fontweight="900", color="white", zorder=3)
+    for idx, (title, rows) in enumerate(sections):
+        ax = fig.add_subplot(gs[idx])
+        if bottom_ax is None: bottom_ax = ax  # remember to share later
+        else: ax.sharex(bottom_ax)
 
-    # Title
-    ax.text(0.0, 1.06, title, transform=ax.transAxes,
-            fontsize=28, fontweight="900", color="white", ha="left", va="bottom")
+        ax.set_facecolor(AXBG)
+        ax.set_xlim(xmin, xmax)
 
-    # Optional x label
-    if show_xlabel:
-        ax.set_xlabel("Percentile Rank", color="white", fontsize=14, fontweight="700", labelpad=10)
-    else:
-        ax.set_xlabel("")
+        # layout: one lane per metric
+        n = len(rows)
+        y = list(range(n))[::-1]  # top→bottom
+        bar_h = 0.64              # uniform, thick
+        track_h = 0.80
 
-    # Clean spines
-    for s in ["top","right","left","bottom"]:
-        ax.spines[s].set_visible(False)
+        # background “tracks”
+        for i in range(n):
+            ax.barh(y[i], 100, height=track_h, color="#1b2230", edgecolor="none", left=0, zorder=1)
 
-def draw_replica_percentile_chart(title_suffix=""):
-    """
-    Builds the three sections from your dataset using pct_of/val_of and draws them.
-    title_suffix: appears in the small footer (e.g., 'vs Germany 4. STs • minutes ≥ 1000')
-    """
-    # ---- rows (label, percentile, value text) in the order you want shown ----
-    ATTACKING = [
-        ("Crosses", pct_of("Crosses per 90"),              f"{val_of('Crosses per 90')[0]:.2f}" if not np.isnan(val_of('Crosses per 90')[0]) else "—"),
-        ("Crossing Accuracy %", pct_of("Accurate crosses, %"), f"{int(round(val_of('Accurate crosses, %')[0]))}%"
-            if not np.isnan(val_of('Accurate crosses, %')[0]) else "—"),
-        ("Goals: Non-Penalty", pct_of("Non-penalty goals per 90"), f"{val_of('Non-penalty goals per 90')[1]}"),
-        ("xG", pct_of("xG per 90"),                         f"{val_of('xG per 90')[1]}"),
-        ("Conversion Rate %", pct_of("Goal conversion, %"), f"{int(round(val_of('Goal conversion, %')[0]))}%"
-            if not np.isnan(val_of('Goal conversion, %')[0]) else "—"),
-        ("Header Goals", pct_of("Head goals per 90") if "Head goals per 90" in df.columns else np.nan,
-            f"{val_of('Head goals per 90')[1]}" if "Head goals per 90" in df.columns else "—"),
-        ("Expected Assists", pct_of("xA per 90"),           f"{val_of('xA per 90')[1]}"),
-        ("Offensive Duels", pct_of("Offensive duels per 90") if "Offensive duels per 90" in df.columns else np.nan,
-            f"{val_of('Offensive duels per 90')[1]}" if "Offensive duels per 90" in df.columns else "—"),
-        ("Offensive Duel Success %", pct_of("Offensive duels won, %") if "Offensive duels won, %" in df.columns else np.nan,
-            f"{int(round(val_of('Offensive duels won, %')[0]))}%" if "Offensive duels won, %" in df.columns and not np.isnan(val_of('Offensive duels won, %')[0]) else "—"),
-        ("Progressive Runs", pct_of("Progressive runs per 90"), f"{val_of('Progressive runs per 90')[1]}"),
-        ("Shots", pct_of("Shots per 90"),                   f"{val_of('Shots per 90')[1]}"),
-        ("Shooting Accuracy %", pct_of("Shots on target, %"), f"{int(round(val_of('Shots on target, %')[0]))}%"
-            if not np.isnan(val_of('Shots on target, %')[0]) else "—"),
-        ("Successful Attacking Actions", pct_of("Successful defensive actions per 90") if "Successful defensive actions per 90" in df.columns else np.nan, "—"),
-        ("Touches in box", pct_of("Touches in box per 90"), f"{val_of('Touches in box per 90')[1]}"),
-    ]
+        # bars + overlays
+        for i, (lab, pct, rawtxt) in enumerate(rows):
+            pct = float(0 if pct is None or pd.isna(pct) else pct)
+            ax.barh(y[i], pct, height=bar_h, left=0, color=_pct_color(pct), edgecolor="none", zorder=3)
+            # value label (optional, small, white, centered near the bar’s right end)
+            if (value_labels is True) or (value_labels is None and rawtxt not in (None,"—","")):
+                txt = rawtxt if rawtxt not in (None,"") else f"{pct:.0f}%"
+                ax.text(pct-1.2 if pct>8 else pct+1.2, y[i], str(txt),
+                        ha="right" if pct>8 else "left", va="center",
+                        fontsize=10, color="#fff", fontweight="bold", zorder=4)
 
-    DEFENSIVE = [
-        ("Aerial Duels", pct_of("Aerial duels per 90"), f"{val_of('Aerial duels per 90')[1]}"),
-        ("Aerial Win %", pct_of("Aerial duels won, %"), f"{int(round(val_of('Aerial duels won, %')[0]))}%"
-            if not np.isnan(val_of('Aerial duels won, %')[0]) else "—"),
-        ("Defensive Duels", pct_of("Defensive duels per 90"), f"{val_of('Defensive duels per 90')[1]}"),
-        ("Defensive Duel Success %", pct_of("Defensive duels won, %"), f"{int(round(val_of('Defensive duels won, %')[0]))}%"
-            if not np.isnan(val_of('Defensive duels won, %')[0]) else "—"),
-        ("PAdj. Interceptions", pct_of("PAdj Interceptions"), f"{val_of('PAdj Interceptions')[1]}"),
-        ("Successful Defensive Actions", pct_of("Successful defensive actions per 90") if "Successful defensive actions per 90" in df.columns else np.nan,
-            f"{val_of('Successful defensive actions per 90')[1]}" if "Successful defensive actions per 90" in df.columns else "—"),
-    ]
+        # y labels (bold, left, 11pt)
+        ax.set_yticks(y)
+        ax.set_yticklabels([r[0] for r in rows], fontdict={**_segui(), "size":11, "color":"#fff"})
+        ax.tick_params(axis="y", length=0, pad=6)
 
-    POSSESSION = [
-        ("Accelerations", pct_of("Accelerations per 90") if "Accelerations per 90" in df.columns else np.nan,
-            f"{val_of('Accelerations per 90')[1]}" if "Accelerations per 90" in df.columns else "—"),
-        ("Deep Completions", pct_of("Deep completions per 90"), f"{val_of('Deep completions per 90')[1]}"),
-        ("Dribbles", pct_of("Dribbles per 90"), f"{val_of('Dribbles per 90')[1]}"),
-        ("Dribbling Success %", pct_of("Successful dribbles, %"), f"{int(round(val_of('Successful dribbles, %')[0]))}%"
-            if not np.isnan(val_of('Successful dribbles, %')[0]) else "—"),
-        ("Key passes", pct_of("Key passes per 90"), f"{val_of('Key passes per 90')[1]}"),
-        ("Passes", pct_of("Passes per 90"), f"{val_of('Passes per 90')[1]}"),
-        ("Passing Accuracy %", pct_of("Accurate passes, %"), f"{int(round(val_of('Accurate passes, %')[0]))}%"
-            if not np.isnan(val_of('Accurate passes, %')[0]) else "—"),
-        ("Passes to Penalty Area", pct_of("Passes to penalty area per 90"), f"{val_of('Passes to penalty area per 90')[1]}"),
-        ("Pass Pen-Area %", pct_of("Accurate passes to penalty area, %"), f"{int(round(val_of('Accurate passes to penalty area, %')[0]))}%"
-            if not np.isnan(val_of('Accurate passes to penalty area, %')[0]) else "—"),
-        ("Progressive Runs", pct_of("Progressive runs per 90"), f"{val_of('Progressive runs per 90')[1]}"),
-        ("Smart Passes", pct_of("Smart passes per 90"), f"{val_of('Smart passes per 90')[1]}"),
-    ]
+        # vertical grid every 10% + minor at 5%
+        ax.xaxis.set_major_locator(MultipleLocator(10))
+        ax.xaxis.set_minor_locator(MultipleLocator(5))
+        for v in range(0,101,10):
+            ax.axvline(v, color=GRID, lw=1.1, zorder=0)
+        for v in range(5,100,10):
+            ax.axvline(v, color=GRID, lw=0.6, alpha=0.55, zorder=0)
 
-    # Remove any rows with all-NaN percentile
-    ATTACKING_f = [r for r in ATTACKING if not np.isnan(r[1])]
-    DEFENSIVE_f = [r for r in DEFENSIVE if not np.isnan(r[1])]
-    POSSESSION_f= [r for r in POSSESSION if not np.isnan(r[1])]
+        # faint horizontal separators per row
+        for i in range(n):
+            ax.axhline(y[i]+track_h/2, color=GRID_H, lw=0.8, zorder=2, alpha=0.55)
+            ax.axhline(y[i]-track_h/2, color=GRID_H, lw=0.8, zorder=2, alpha=0.55)
 
-    # ---- figure
-    fig = plt.figure(figsize=(14, 9), dpi=180)
-    fig.patch.set_facecolor("#0b0f19")
+        # dashed 50% reference
+        ax.axvline(50, color="#ffffff", lw=1.6, ls=(0,(6,6)), alpha=0.9, zorder=2)
 
-    # grid spec: 3 equal-height panels with small gaps
-    gs = fig.add_gridspec(nrows=3, ncols=1, height_ratios=[1,1,1], hspace=0.30)
+        # hide x stuff for upper panels
+        if idx < len(sections)-1:
+            ax.tick_params(axis="x", bottom=False, labelbottom=False)
+        else:
+            ax.tick_params(axis="x", colors=TICK, labelsize=11)
+            ax.xaxis.set_major_formatter(FormatStrFormatter('%d%%'))
+            ax.set_xlabel("Percentile Rank", color="#f5f6f7", fontdict={**_segui(), "size":13}, labelpad=10)
 
-    ax1 = fig.add_subplot(gs[0,0])
-    ax2 = fig.add_subplot(gs[1,0])
-    ax3 = fig.add_subplot(gs[2,0])
+        # panel title — 22pt left aligned
+        ax.text(0.0, 1.08, title, transform=ax.transAxes,
+                fontdict={**_segui(), "size":22, "color":"#ffffff"}, ha="left", va="bottom")
 
-    _panel(ax1, ATTACKING_f, "Attacking")
-    _panel(ax2, DEFENSIVE_f, "Defensive")
-    _panel(ax3, POSSESSION_f, "Possession", show_xlabel=True)
+        # tidy spines
+        for s in ["top","right","left","bottom"]:
+            ax.spines[s].set_visible(False)
 
-    # thin white separators between panels (full width)
-    for ax in (ax1, ax2):
-        bb = ax.get_position()
-        fig.add_artist(plt.Line2D([bb.x0, bb.x1], [bb.y0-0.01, bb.y0-0.01], transform=fig.transFigure,
-                                  color="#ffffff", linewidth=1.4, alpha=0.65))
+        # extra left margin for long labels
+        ax.margins(x=0.00)
+        ax.set_ylim(-0.8, n-0.2)
 
-    # footer / caption
-    if title_suffix:
-        fig.text(0.5, 0.02, title_suffix, ha="center", va="center",
-                 color="#c8ceda", fontsize=12, fontweight="700")
+    if footer_note:
+        fig.text(0.5, 0.025, footer_note, ha="center", va="center",
+                 color="#dbe1ea", fontsize=11, fontweight="bold")
 
-    st.pyplot(fig, use_container_width=True)
+    return fig
 
-# ---- Call it (example caption pulled from your pool) ----
-try:
-    pool_size = len(pool_df) if isinstance(pool_df, pd.DataFrame) else 0
-    mins_low  = int(min_minutes_pool) if 'min_minutes_pool' in locals() else 0
-    lg_txt    = ", ".join(sorted(set(pool_df['League']))) if pool_size else ""
-    caption   = f"Percentile Rank vs {lg_txt} • {pool_size} players • minutes filter ≥ {mins_low}"
-except Exception:
-    caption = ""
+# ---------- BUILD THE THREE PANELS FROM YOUR DATA (order matches your screenshots) ----------
+attacking_order = [
+    ("Crosses",                           pct_of("Crosses per 90"),                        val_of("Crosses per 90")[1]),
+    ("Crossing Accuracy %",               pct_of("Accurate crosses, %"),                  f"{int(round(val_of('Accurate crosses, %')[0]))}%"),
+    ("Goals: Non-Penalty",                pct_of("Non-penalty goals per 90"),             val_of("Non-penalty goals per 90")[1]),
+    ("xG",                                pct_of("xG per 90"),                             val_of("xG per 90")[1]),
+    ("Conversion Rate %",                 pct_of("Goal conversion, %"),                   f"{int(round(val_of('Goal conversion, %')[0]))}%"),
+    ("Header Goals",                      pct_of("Head goals per 90") if 'Head goals per 90' in df.columns else 0,  val_of("Head goals per 90")[1] if 'Head goals per 90' in df.columns else ""),
+    ("Expected Assists",                  pct_of("xA per 90"),                             val_of("xA per 90")[1]),
+    ("Offensive Duels",                   pct_of("Offensive duels per 90") if 'Offensive duels per 90' in df.columns else pct_of("Dribbles per 90"), val_of("Offensive duels per 90")[1] if 'Offensive duels per 90' in df.columns else val_of("Dribbles per 90")[1]),
+    ("Offensive Duel Success %",          pct_of("Offensive duels won, %") if 'Offensive duels won, %' in df.columns else pct_of("Successful dribbles, %"), f"{int(round(val_of('Offensive duels won, %')[0]))}%" if 'Offensive duels won, %' in df.columns else f"{int(round(val_of('Successful dribbles, %')[0]))}%"),
+    ("Progressive Runs",                  pct_of("Progressive runs per 90"),              val_of("Progressive runs per 90")[1]),
+    ("Shots",                             pct_of("Shots per 90"),                          val_of("Shots per 90")[1]),
+    ("Shooting Accuracy %",               pct_of("Shots on target, %"),                   f"{int(round(val_of('Shots on target, %')[0]))}%"),
+    ("Successful Attacking Actions %",    pct_of("Successful offensive actions, %") if 'Successful offensive actions, %' in df.columns else 0, ""),
+    ("Touches in box",                    pct_of("Touches in box per 90"),                val_of("Touches in box per 90")[1]),
+]
 
-draw_replica_percentile_chart(title_suffix=caption)
-# =================== END REPLICA PERCENTILE CHART ===================
+defensive_order = [
+    ("Aerial Duels",                      pct_of("Aerial duels per 90"),                  val_of("Aerial duels per 90")[1]),
+    ("Aerial Win %",                      pct_of("Aerial duels won, %"),                  f"{int(round(val_of('Aerial duels won, %')[0]))}%"),
+    ("Defensive Duels",                   pct_of("Defensive duels per 90"),               val_of("Defensive duels per 90")[1]),
+    ("Defensive Duel Success %",          pct_of("Defensive duels won, %"),               f"{int(round(val_of('Defensive duels won, %')[0]))}%"),
+    ("PAdj. Interceptions",               pct_of("PAdj Interceptions"),                   val_of("PAdj Interceptions")[1]),
+    ("Successful Defensive Actions",      pct_of("Successful defensive actions per 90") if 'Successful defensive actions per 90' in df.columns else 0, val_of("Successful defensive actions per 90")[1] if 'Successful defensive actions per 90' in df.columns else ""),
+]
+
+possession_order = [
+    ("Accelerations",                     pct_of("Accelerations per 90"),                 val_of("Accelerations per 90")[1]),
+    ("Deep Completions",                  pct_of("Deep completions per 90"),              val_of("Deep completions per 90")[1]),
+    ("Dribbles",                          pct_of("Dribbles per 90"),                      val_of("Dribbles per 90")[1]),
+    ("Dribbling Success %",               pct_of("Successful dribbles, %"),               f"{int(round(val_of('Successful dribbles, %')[0]))}%"),
+    ("Key passes",                        pct_of("Key passes per 90"),                    val_of("Key passes per 90")[1]),
+    ("Passes",                            pct_of("Passes per 90"),                        val_of("Passes per 90")[1]),
+    ("Passing Accuracy %",                pct_of("Accurate passes, %"),                   f"{int(round(val_of('Accurate passes, %')[0]))}%"),
+    ("Passes to Penalty Area",            pct_of("Passes to penalty area per 90"),        val_of("Passes to penalty area per 90")[1]),
+    ("Pass Pen-Area %",                   pct_of("Accurate passes to penalty area, %"),   f"{int(round(val_of('Accurate passes to penalty area, %')[0]))}%"),
+    ("Progressive Runs",                  pct_of("Progressive runs per 90"),              val_of("Progressive runs per 90")[1]),
+    ("Smart Passes",                      pct_of("Smart passes per 90"),                  val_of("Smart passes per 90")[1]),
+]
+
+# Build + render
+sections = [
+    ("Attacking",  attacking_order),
+    ("Defensive",  defensive_order),
+    ("Possession", possession_order),
+]
+note = f"Percentile Rank vs {', '.join(sorted(set(build_pool_df()['League']))) if 'build_pool_df' in globals() else player_row.iloc[0]['League']}. • minutes filter ≥ {int(min_minutes_pool) if 'min_minutes_pool' in globals() else int(df['Minutes played'].min())}"
+fig = draw_replica_percentiles(sections, value_labels=None, footer_note=note)
+st.pyplot(fig, use_container_width=True)
+# Optional: download
+from io import BytesIO
+buf = BytesIO(); fig.savefig(buf, format="png", dpi=200, bbox_inches="tight", facecolor=fig.get_facecolor())
+st.download_button("⬇️ Download percentile chart (PNG)", data=buf.getvalue(),
+                   file_name=f"{str(player_name).replace(' ','_')}_percentiles.png", mime="image/png")
+# ==== END REPLICA CHART =========================================================
 
 
 
