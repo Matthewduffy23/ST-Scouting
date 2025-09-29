@@ -1346,7 +1346,7 @@ else:
 
         # Section title
         fig.text(left_margin, panel_top - 0.012, title, ha="left", va="top",
-                 fontsize=21, fontweight="900", color=TITLE)
+                 fontsize=20, fontweight="900", color=TITLE)
 
         # Axis for bars
         ax = fig.add_axes([
@@ -1383,19 +1383,19 @@ else:
                                        color=pct_to_rgb(bar_w), ec="none", zorder=0.9))
             # value label just inside the bar, very near the left edge
             ax.text(1.0, y, val_str, ha="left", va="center",
-                    fontsize=8.5, fontweight="400", color="#0B0B0B", zorder=1.1)
+                    fontsize=8, fontweight="400", color="#0B0B0B", zorder=1.1)
 
         # metric labels in left gutter
         for i, (lab, _, _) in enumerate(tuples[::-1]):
             y_fig = (panel_top - header_h - n*row_slot) + ((i + 0.5) * row_slot)
             fig.text(left_margin, y_fig, lab, ha="left", va="center",
-                     fontsize=12, fontweight="bold", color=LABEL)
+                     fontsize=10, fontweight="bold", color=LABEL)
 
         # Section divider (stronger, like Tableau)
         if draw_bottom_divider:
             y0 = panel_top - panel_h - 0.008
             fig.lines.append(plt.Line2D([left_margin, 1 - right_margin], [y0, y0],
-                                        transform=fig.transFigure, color=DIVIDER, lw=2.8, alpha=1.0))
+                                        transform=fig.transFigure, color=DIVIDER, lw=1.5, alpha=1.0))
         return panel_top - panel_h - gap_between
 
     # Render panels; only the last shows tick labels
