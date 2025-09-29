@@ -1234,6 +1234,279 @@ if isinstance(role_scores, dict) and role_scores:
 
 # ============================ END — WIDER PANELS, SMALLER CENTER GAP, EXTRA TOP-LEFT PADDING ============================
 
+# ===================== FEATURE (EXACT DUPLICATE • 1000x800) =====================
+# Paste this block as-is. It renders the three-panel chart exactly like your image.
+
+from io import BytesIO
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from matplotlib.font_manager import FontProperties
+from matplotlib.ticker import MultipleLocator, FixedLocator
+import matplotlib.transforms as mtrans
+
+# If you have the exact font file, point to it here for pixel-perfect typography:
+FONT_PATH = None           # e.g. r"C:\Fonts\GothicUISemibold.ttf"
+FONT_NAME = "Gothic UI Semibold"
+
+# ---- theme ----
+PAGE_BG  = "#0a0f1c"
+PANEL_BG = "#11161C"
+TRACK_BG = "#222c3d"
+TEXT     = "#E5E7EB"
+
+# ---- fixed pixel geometry (bars/tracks/gaps) ----
+BAR_PX = 24
+GAP_PX = 6
+SEP_PX = 2
+STEP_PX = BAR_PX + GAP_PX   # used to compute panel height precisely
+
+# ---------- fonts ----------
+def _fp(size, *, weight="semibold"):
+    if FONT_PATH:
+        try: return FontProperties(fname=FONT_PATH, size=size, weight=weight)
+        except Exception: pass
+    # try by name, then clean fallback
+    try: return FontProperties(family=FONT_NAME, size=size, weight=weight)
+    except Exception: return FontProperties(family="DejaVu Sans", size=size, weight=weight)
+
+FP_TITLE = _fp(22, weight="bold")       # titles: 22, bold
+FP_LABEL = _fp(11, weight="semibold")   # metric labels: 11, semibold
+FP_VALUE = _fp(10.5, weight="semibold") # numeric values to the right
+FP_CAP   = _fp(12, weight="semibold")   # bottom caption
+
+# ---------- helpers ----------
+def _div_color(v):
+    """Red→Amber→Green diverging by percentile (0..100)."""
+    if pd.isna(v): return (0.6, 0.63, 0.66)
+    v = float(v)
+    if v <= 50:
+        t = v/50.0;  c1, c2 = np.array([239,68,68]),  np.array([234,179,8])
+    else:
+        t = (v-50)/50.0; c1, c2 = np.array([234,179,8]), np.array([34,197,94])
+    rgb = ((c1 + (c2-c1)*t)/255.0).astype(float)
+    return tuple(rgb)
+
+def _text_w_frac(fig, s, fp):
+    """Exact text width as a fraction of fig width (for label gutter)."""
+    t = fig.text(0, 0, s, fontproperties=fp, transform=fig.transFigure, alpha=0)
+    fig.canvas.draw(); r = fig.canvas.get_renderer()
+    w = t.get_window_extent(renderer=r).width; t.remove()
+    return w / fig.bbox.width
+
+def _pct(sr, metric):
+    col = f"{metric} Percentile"
+    if col in sr.index and pd.notna(sr[col]): return float(sr[col])
+    return np.nan
+
+def _val(sr, metric):
+    v = sr.get(metric, np.nan)
+    if isinstance(v, (int, float)): return f"{v:.2f}"
+    return "—"
+
+# ---------- core panel ----------
+def _panel(fig, left, top, width, title, triples):
+    """
+    triples: [(label, percentile_float, value_text), ...] (top-to-bottom)
+    returns bottom y (fig fraction)
+    """
+    fig.canvas.draw()
+    fig_px_h = fig.bbox.height
+    n = len(triples)
+    ax_h = (n * STEP_PX) / fig_px_h
+    bottom = top - ax_h
+
+    # outer panel (faint white spines = separators)
+    axp = fig.add_axes([left, bottom, width, ax_h])
+    axp.set_facecolor(PANEL_BG)
+    axp.set_xticks([]); axp.set_yticks([])
+    for sp in axp.spines.values():
+        sp.set_visible(True); sp.set_color("white"); sp.set_alpha(0.18); sp.set_linewidth(1.0)
+
+    labels = [t[0] for t in triples]
+    pcts   = [float(np.nan_to_num(t[1], nan=0.0)) for t in triples]
+    vals   = [t[2] for t in triples]
+
+    # left gutter width (longest label)
+    gutter_w = (max(_text_w_frac(fig, s, FP_LABEL) for s in labels) if labels else 0) + 0.010
+
+    # bars axis
+    bar_left  = left + gutter_w
+    bar_width = max(0.001, width - gutter_w - 0.008)
+    ax = fig.add_axes([bar_left, bottom, bar_width, ax_h])
+    ax.set_facecolor(PANEL_BG)
+    ax.set_xlim(0, 100); ax.set_ylim(-0.5, n - 0.5)
+    ax.set_axisbelow(True)
+
+    # gridlines across & down (white 10%)
+    ax.xaxis.set_major_locator(MultipleLocator(10))
+    ax.yaxis.set_major_locator(FixedLocator(np.arange(n)))  # one per row
+    ax.grid(which="major", axis="both", color="white", alpha=0.10, linewidth=0.8)
+
+    # constant thicker 50th percentile line (solid white)
+    ax.axvline(50, color="white", linewidth=2.8, zorder=6)
+
+    # tracks & bars (fixed pixel heights)
+    bar_du = BAR_PX / STEP_PX
+    gap_du = GAP_PX / STEP_PX
+    sep_du = SEP_PX / STEP_PX
+    track_h = bar_du + gap_du - sep_du
+    y_idx = np.arange(n)[::-1]
+
+    for yi in y_idx:
+        ax.add_patch(mpatches.Rectangle((0, yi - track_h/2), 100, track_h,
+                                        facecolor=TRACK_BG, edgecolor="none", zorder=0))
+
+    # values: place using blended axis fraction (x) & data (y) so they sit just right of the bar area
+    trans = mtrans.blended_transform_factory(ax.transAxes, ax.transData)
+    for yi, v, t in zip(y_idx, pcts, vals):
+        ax.add_patch(mpatches.Rectangle((0, yi - bar_du/2), v, bar_du,
+                                        facecolor=_div_color(v), edgecolor="none", zorder=5))
+        ax.text(1.005, yi, t, transform=trans, va="center", ha="left",
+                color="#0B0B0B", fontproperties=FP_VALUE, zorder=8)
+
+    # clean axis visuals (spines off; ticks hidden; grid already on)
+    for sp in ax.spines.values(): sp.set_visible(False)
+    ax.tick_params(axis="both", length=0, labelsize=0)
+
+    # left gutter metric labels
+    for yi, lab in zip(y_idx, labels):
+        y_fig = bottom + ax_h * ((yi + 0.5) / max(1, n))
+        fig.text(left + 0.003, y_fig, lab, color=TEXT, fontproperties=FP_LABEL,
+                 va="center", ha="left")
+
+    # section title (22 pt, bold)
+    fig.text(left, bottom + ax_h + 0.012, title, color=TEXT,
+             fontproperties=FP_TITLE, ha="left", va="bottom")
+
+    # faint inner top separator line
+    ax.plot([0, 1], [1, 1], transform=ax.transAxes, color="white", linewidth=0.9, alpha=0.18)
+
+    return bottom
+
+# ---------- main renderer ----------
+def render_three_panel_exact(player_row: pd.Series, out_png_path="three_panel_1000x800.png"):
+    ATTACKING = [(lab, _pct(player_row, met), _val(player_row, met)) for lab, met in [
+        ("Crosses", "Crosses per 90"),
+        ("Crossing Accuracy %", "Accurate crosses, %"),
+        ("Goals: Non-Penalty", "Non-penalty goals per 90"),
+        ("xG", "xG per 90"),
+        ("Conversion Rate %", "Goal conversion, %"),
+        ("Header Goals", "Header goals per 90"),
+        ("Expected Assists", "xA per 90"),
+        ("Offensive Duels", "Offensive duels per 90"),
+        ("Offensive Duel Success %", "Offensive duels won, %"),
+        ("Progressive Runs", "Progressive runs per 90"),
+        ("Shots", "Shots per 90"),
+        ("Shooting Accuracy %", "Shots on target, %"),
+        ("Successful Attacking Actio..", "Successful attacking actions per 90"),
+        ("Touches in Opposition Box", "Touches in box per 90"),
+    ]]
+
+    DEFENSIVE = [(lab, _pct(player_row, met), _val(player_row, met)) for lab, met in [
+        ("Aerial Duels", "Aerial duels per 90"),
+        ("Aerial Duel Success %", "Aerial duels won, %"),
+        ("Defensive Duels", "Defensive duels per 90"),
+        ("Defensive Duel Success %", "Defensive duels won, %"),
+        ("PAdj. Interceptions", "PAdj Interceptions"),
+        ("Successful Defensive Actio..", "Successful defensive actions per 90"),
+    ]]
+
+    POSSESSION = [(lab, _pct(player_row, met), _val(player_row, met)) for lab, met in [
+        ("Deep Completions", "Deep completions per 90"),
+        ("Dribbles", "Dribbles per 90"),
+        ("Dribbling Success %", "Successful dribbles, %"),
+        ("Key Passes", "Key passes per 90"),
+        ("Passes", "Passes per 90"),
+        ("Passing Accuracy %", "Accurate passes, %"),
+        ("Passes to Penalty Area", "Passes to penalty area per 90"),
+        ("Passes to Penalty Area Su..", "Accurate passes to penalty area, %"),
+        ("Smart Passes", "Smart passes per 90"),
+    ]]
+
+    league = str(player_row.get("League", "the league"))
+
+    # 1000 x 800 canvas
+    fig = plt.figure(figsize=(10, 8), dpi=100)
+    fig.patch.set_facecolor(PAGE_BG)
+
+    # layout tuned for this size (mirrors your screenshot)
+    LEFT=0.055; WIDTH_L=0.43; MID_GAP=0.040
+    RIGHT = LEFT + WIDTH_L + MID_GAP; WIDTH_R=0.43
+    TOP=0.86; V_GAP=0.070
+
+    b1 = _panel(fig, LEFT, TOP, WIDTH_L, "Attacking", ATTACKING)
+    b2 = _panel(fig, LEFT, b1 - V_GAP, WIDTH_L, "Defensive", DEFENSIVE)
+    _  = _panel(fig, RIGHT, TOP, WIDTH_R, "Possession", POSSESSION)
+
+    # bottom caption
+    fig.text(0.5, 0.045,
+             f"Percentile Rank vs {league} ST's with > 400 minutes played",
+             color=TEXT, fontproperties=FP_CAP, ha="center", va="center")
+
+    fig.savefig(out_png_path, dpi=100, bbox_inches="tight", facecolor=fig.get_facecolor())
+    return out_png_path, fig
+
+# ---------- STREAMLIT GLUE (safe to leave in; no effect outside Streamlit) ----------
+try:
+    import streamlit as st
+    def show_three_panel_feature(player_row_df: pd.DataFrame = None):
+        # Use real data if provided, else draw a small sample so it always renders
+        if player_row_df is not None and not player_row_df.empty:
+            sr = player_row_df.iloc[0]
+        else:
+            # minimal sample
+            demo = {
+                "League":"Allsvenskan",
+                "Crosses per 90":3.1,"Crosses per 90 Percentile":38,
+                "Accurate crosses, %":27,"Accurate crosses, % Percentile":24,
+                "Non-penalty goals per 90":0.45,"Non-penalty goals per 90 Percentile":66,
+                "xG per 90":0.52,"xG per 90 Percentile":50,
+                "Goal conversion, %":19,"Goal conversion, % Percentile":54,
+                "Header goals per 90":0.12,"Header goals per 90 Percentile":92,
+                "xA per 90":0.15,"xA per 90 Percentile":58,
+                "Offensive duels per 90":6.4,"Offensive duels per 90 Percentile":60,
+                "Offensive duels won, %":43,"Offensive duels won, % Percentile":22,
+                "Progressive runs per 90":2.4,"Progressive runs per 90 Percentile":65,
+                "Shots per 90":2.9,"Shots per 90 Percentile":62,
+                "Shots on target, %":44,"Shots on target, % Percentile":44,
+                "Successful attacking actions per 90":4.1,"Successful attacking actions per 90 Percentile":35,
+                "Touches in box per 90":3.2,"Touches in box per 90 Percentile":18,
+                "Aerial duels per 90":6.1,"Aerial duels per 90 Percentile":42,
+                "Aerial duels won, %":53,"Aerial duels won, % Percentile":86,
+                "Defensive duels per 90":5.0,"Defensive duels per 90 Percentile":30,
+                "Defensive duels won, %":58,"Defensive duels won, % Percentile":72,
+                "PAdj Interceptions":5.8,"PAdj Interceptions Percentile":41,
+                "Successful defensive actions per 90":9.3,"Successful defensive actions per 90 Percentile":40,
+                "Deep completions per 90":0.6,"Deep completions per 90 Percentile":6,
+                "Dribbles per 90":4.1,"Dribbles per 90 Percentile":34,
+                "Successful dribbles, %":51,"Successful dribbles, % Percentile":45,
+                "Key passes per 90":0.9,"Key passes per 90 Percentile":13,
+                "Passes per 90":28,"Passes per 90 Percentile":29,
+                "Accurate passes, %":79,"Accurate passes, % Percentile":43,
+                "Passes to penalty area per 90":0.6,"Passes to penalty area per 90 Percentile":6,
+                "Accurate passes to penalty area, %":48,"Accurate passes to penalty area, % Percentile":50,
+                "Smart passes per 90":0.5,"Smart passes per 90 Percentile":56,
+            }
+            sr = pd.Series(demo)
+
+        path, fig = render_three_panel_exact(sr, "three_panel_1000x800.png")
+
+        # show exact 1000x800 image (Streamlit sometimes rescales pyplot)
+        st.image(path, caption="Three-panel percentile chart (1000×800)", use_column_width=False)
+        with open(path, "rb") as f:
+            st.download_button("⬇️ Download 1000×800 PNG", data=f.read(),
+                               file_name="three_panel_1000x800.png", mime="image/png")
+
+    # Uncomment this in your Streamlit page where you want the feature to appear:
+    # show_three_panel_feature(player_row)
+except Exception:
+    # Not running in Streamlit — ignore
+    pass
+# ===================== END FEATURE =====================
+
+
 
 # ----------------- (A) SCATTERPLOT — Goals vs xG -----------------
 st.markdown("---")
@@ -1470,6 +1743,7 @@ try:
 except Exception as e:
     st.info(f"Scatter could not be drawn: {e}")
 # ----------------------------------------------------------------------
+
 # ----------------- (B) COMPARISON RADAR — universal position_filter, A fixed, B any league -----------------
 st.markdown("---")
 st.header("📊 Player Comparison Radar")
