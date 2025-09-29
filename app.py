@@ -1234,175 +1234,132 @@ if isinstance(role_scores, dict) and role_scores:
 
 # ============================ END — WIDER PANELS, SMALLER CENTER GAP, EXTRA TOP-LEFT PADDING ============================
 
-# ==== REPLICA PERCENTILE CHART (exact styling) =================================
+# =========================== REPLICA PERCENTILE CHART ===========================
+# Inputs expected (you already create these earlier):
+#   ATTACKING, DEFENSIVE, POSSESSION  -> list[tuple[str, float, str]]
+#       tuple = (metric_label, percentile_0_100, value_text_shown_on_bar)
+# They can contain NaNs in percentile; those rows are skipped.
+
+import math
+import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib import gridspec
-from matplotlib.ticker import MultipleLocator, FormatStrFormatter
+from matplotlib import ticker
 
-def _segui():
-    # Prefer Segoe UI Semibold (close match to Gothic UI Semibold); fallbacks included.
-    return {"family":["Segoe UI Semibold","Segoe UI","Inter","SF Pro Text","Helvetica Neue","Arial"],
-            "weight":"bold"}
+# --- Style tokens (tweak here if you need fine control)
+BG_PAGE   = "#0B1220"   # page / canvas
+BG_AX     = "#151C27"   # panel background (slightly lighter)
+GRID      = "#3B4554"   # grid line colour
+GRID_MINOR= "#2A3443"
+WHITE     = "#FFFFFF"
+LABEL     = WHITE
+TITLE     = WHITE
+AX_LABEL  = WHITE
+FIFTY     = "#E5E7EB"   # 50% dashed
+PCT_BADGE = "#111827"   # small pill behind the numeric text (keeps it readable)
 
-def _pct_color(p):
-    # red → amber → green like your reference
-    p = float(max(0,min(100,p)))/100.0
-    if p < 0.5:   # red -> amber
-        t = p/0.5
-        c1 = (0.88,0.27,0.27); c2 = (0.90,0.75,0.20)
-    else:         # amber -> green
-        t = (p-0.5)/0.5
-        c1 = (0.90,0.75,0.20); c2 = (0.20,0.75,0.30)
-    return tuple(c1[i] + (c2[i]-c1[i])*t for i in range(3))
+# “traffic-light” colour ramp like the screenshot (low→mid→high)
+def ramp(v):
+    v = float(np.clip(v, 0, 100)) / 100.0
+    if v <= 0.5:  # red -> yellow
+        t = v / 0.5
+        c1 = np.array([239, 68, 68])   # red
+        c2 = np.array([234, 179, 8])   # amber
+    else:         # yellow -> green
+        t = (v - 0.5) / 0.5
+        c1 = np.array([234, 179, 8])   # amber
+        c2 = np.array([34, 197, 94])   # green
+    rgb = (c1 + (c2 - c1) * t) / 255.0
+    return tuple(rgb)
 
-def draw_replica_percentiles(sections, value_labels=None, footer_note=""):
-    """
-    sections: list of tuples -> [("Attacking", [("Crosses", pct, rawtxt), ...]), ("Defensive", [...]), ...]
-              pct is 0..100; rawtxt (optional) overlays small text on the bar.
-    value_labels: if True/False per panel; or None -> show when rawtxt provided.
-    footer_note: string under the bottom axis (pool + minutes text etc.)
-    """
-    PAGE = "#0b111b"; AXBG="#202734"; GRID="#3a4354"; GRID_H="#2c3444"; TICK="#e5e7eb"
-    fig = plt.figure(figsize=(14.0, 8.6), dpi=220)
-    fig.patch.set_facecolor(PAGE)
-    gs  = gridspec.GridSpec(len(sections), 1, height_ratios=[len(p[1]) for p in sections], hspace=0.26)
+# --- Core rendering (three stacked panels, one shared x-axis)
+def draw_replica_panels(attacking, defensive, possession,
+                        footer="Percentile Rank vs pool"):
+    groups = [("Attacking", attacking), ("Defensive", defensive), ("Possession", possession)]
+    # drop rows with NaN percentile
+    groups = [(name, [(l, float(p), str(t)) for (l, p, t) in rows if p == p and np.isfinite(p)]) for name, rows in groups]
 
-    # shared x, 0..100
-    xmin, xmax = 0, 100
-    bottom_ax = None
+    # Figure
+    fig_h = 8.5
+    fig = plt.figure(figsize=(13.5, fig_h), dpi=200)
+    fig.patch.set_facecolor(BG_PAGE)
 
-    for idx, (title, rows) in enumerate(sections):
-        ax = fig.add_subplot(gs[idx])
-        if bottom_ax is None: bottom_ax = ax  # remember to share later
-        else: ax.sharex(bottom_ax)
+    # 3 rows, 1 column, shared x
+    gs = fig.add_gridspec(nrows=3, ncols=1, height_ratios=[1, 1, 1], hspace=0.26)
+    axes = [fig.add_subplot(gs[i, 0]) for i in range(3)]
 
-        ax.set_facecolor(AXBG)
-        ax.set_xlim(xmin, xmax)
+    # X-axis (shared): 0..100 with 10% grid ticks
+    xticks = np.arange(0, 110, 10)
 
-        # layout: one lane per metric
-        n = len(rows)
-        y = list(range(n))[::-1]  # top→bottom
-        bar_h = 0.64              # uniform, thick
-        track_h = 0.80
+    for ax, (title, rows) in zip(axes, groups):
+        ax.set_facecolor(BG_AX)
 
-        # background “tracks”
-        for i in range(n):
-            ax.barh(y[i], 100, height=track_h, color="#1b2230", edgecolor="none", left=0, zorder=1)
+        # Data
+        labels = [r[0] for r in rows]
+        vals   = [r[1] for r in rows]
+        texts  = [r[2] for r in rows]
+        n = len(vals)
+        y = np.arange(n)[::-1]  # top → bottom
 
-        # bars + overlays
-        for i, (lab, pct, rawtxt) in enumerate(rows):
-            pct = float(0 if pct is None or pd.isna(pct) else pct)
-            ax.barh(y[i], pct, height=bar_h, left=0, color=_pct_color(pct), edgecolor="none", zorder=3)
-            # value label (optional, small, white, centered near the bar’s right end)
-            if (value_labels is True) or (value_labels is None and rawtxt not in (None,"—","")):
-                txt = rawtxt if rawtxt not in (None,"") else f"{pct:.0f}%"
-                ax.text(pct-1.2 if pct>8 else pct+1.2, y[i], str(txt),
-                        ha="right" if pct>8 else "left", va="center",
-                        fontsize=10, color="#fff", fontweight="bold", zorder=4)
-
-        # y labels (bold, left, 11pt)
+        # Axis scaffold
+        ax.set_xlim(0, 100)
+        ax.set_ylim(-0.5, n - 0.5)
         ax.set_yticks(y)
-        ax.set_yticklabels([r[0] for r in rows], fontdict={**_segui(), "size":11, "color":"#fff"})
-        ax.tick_params(axis="y", length=0, pad=6)
+        ax.set_yticklabels(labels, color=LABEL, fontsize=11, fontweight="semibold")
+        # grid every 10%
+        ax.set_xticks(xticks)
+        ax.set_xticklabels([])  # only bottom axis has labels
+        ax.grid(True, axis="x", which="major", color=GRID, linewidth=1.0)
+        ax.grid(True, axis="x", which="minor", color=GRID_MINOR, linewidth=0.6)
+        ax.xaxis.set_minor_locator(ticker.MultipleLocator(5))  # subtle 5% minors
+        # border subtle
+        for sp in ax.spines.values(): sp.set_color(GRID)
 
-        # vertical grid every 10% + minor at 5%
-        ax.xaxis.set_major_locator(MultipleLocator(10))
-        ax.xaxis.set_minor_locator(MultipleLocator(5))
-        for v in range(0,101,10):
-            ax.axvline(v, color=GRID, lw=1.1, zorder=0)
-        for v in range(5,100,10):
-            ax.axvline(v, color=GRID, lw=0.6, alpha=0.55, zorder=0)
+        # 50% line
+        ax.axvline(50, color=FIFTY, linestyle=(0, (6, 6)), linewidth=2.0)
 
-        # faint horizontal separators per row
-        for i in range(n):
-            ax.axhline(y[i]+track_h/2, color=GRID_H, lw=0.8, zorder=2, alpha=0.55)
-            ax.axhline(y[i]-track_h/2, color=GRID_H, lw=0.8, zorder=2, alpha=0.55)
+        # Thicker uniform bars
+        bar_h = 0.68
+        for yi, v in zip(y, vals):
+            ax.barh(yi, v, height=bar_h, color=ramp(v), edgecolor="none", zorder=3)
 
-        # dashed 50% reference
-        ax.axvline(50, color="#ffffff", lw=1.6, ls=(0,(6,6)), alpha=0.9, zorder=2)
+        # Numeric pills (actuals or % text) — placed near the right edge of each bar
+        for yi, v, t in zip(y, vals, texts):
+            # keep text visible even for small values
+            x_text = max(4, min(v - 2, 98))
+            # draw a tiny rounded rectangle by placing a text with bbox
+            ax.text(x_text, yi, t, va="center", ha="center",
+                    fontsize=10, color=WHITE, fontweight="bold",
+                    bbox=dict(boxstyle="round,pad=0.18,rounding_size=0.15",
+                              facecolor=PCT_BADGE, edgecolor="none"))
 
-        # hide x stuff for upper panels
-        if idx < len(sections)-1:
-            ax.tick_params(axis="x", bottom=False, labelbottom=False)
-        else:
-            ax.tick_params(axis="x", colors=TICK, labelsize=11)
-            ax.xaxis.set_major_formatter(FormatStrFormatter('%d%%'))
-            ax.set_xlabel("Percentile Rank", color="#f5f6f7", fontdict={**_segui(), "size":13}, labelpad=10)
+        # Left-aligned section title (exactly like the reference)
+        ax.set_title(title, loc="left", pad=12, fontsize=22, color=TITLE, fontweight="semibold")
 
-        # panel title — 22pt left aligned
-        ax.text(0.0, 1.08, title, transform=ax.transAxes,
-                fontdict={**_segui(), "size":22, "color":"#ffffff"}, ha="left", va="bottom")
+        # tidy y-axis ticks
+        ax.tick_params(axis='y', length=0)
 
-        # tidy spines
-        for s in ["top","right","left","bottom"]:
-            ax.spines[s].set_visible(False)
+    # Only the last axis shows x tick labels + bottom label + footer
+    bot = axes[-1]
+    bot.set_xticklabels([f"{int(t)}%" for t in xticks], color=AX_LABEL, fontsize=11, fontweight="semibold")
+    bot.set_xlabel("Percentile Rank", color=AX_LABEL, fontsize=14, fontweight="semibold", labelpad=10)
 
-        # extra left margin for long labels
-        ax.margins(x=0.00)
-        ax.set_ylim(-0.8, n-0.2)
-
-    if footer_note:
-        fig.text(0.5, 0.025, footer_note, ha="center", va="center",
-                 color="#dbe1ea", fontsize=11, fontweight="bold")
+    # Footer / caption centered
+    fig.text(0.5, 0.02, footer, ha="center", va="center", color=WHITE, fontsize=11, fontweight="semibold")
 
     return fig
 
-# ---------- BUILD THE THREE PANELS FROM YOUR DATA (order matches your screenshots) ----------
-attacking_order = [
-    ("Crosses",                           pct_of("Crosses per 90"),                        val_of("Crosses per 90")[1]),
-    ("Crossing Accuracy %",               pct_of("Accurate crosses, %"),                  f"{int(round(val_of('Accurate crosses, %')[0]))}%"),
-    ("Goals: Non-Penalty",                pct_of("Non-penalty goals per 90"),             val_of("Non-penalty goals per 90")[1]),
-    ("xG",                                pct_of("xG per 90"),                             val_of("xG per 90")[1]),
-    ("Conversion Rate %",                 pct_of("Goal conversion, %"),                   f"{int(round(val_of('Goal conversion, %')[0]))}%"),
-    ("Header Goals",                      pct_of("Head goals per 90") if 'Head goals per 90' in df.columns else 0,  val_of("Head goals per 90")[1] if 'Head goals per 90' in df.columns else ""),
-    ("Expected Assists",                  pct_of("xA per 90"),                             val_of("xA per 90")[1]),
-    ("Offensive Duels",                   pct_of("Offensive duels per 90") if 'Offensive duels per 90' in df.columns else pct_of("Dribbles per 90"), val_of("Offensive duels per 90")[1] if 'Offensive duels per 90' in df.columns else val_of("Dribbles per 90")[1]),
-    ("Offensive Duel Success %",          pct_of("Offensive duels won, %") if 'Offensive duels won, %' in df.columns else pct_of("Successful dribbles, %"), f"{int(round(val_of('Offensive duels won, %')[0]))}%" if 'Offensive duels won, %' in df.columns else f"{int(round(val_of('Successful dribbles, %')[0]))}%"),
-    ("Progressive Runs",                  pct_of("Progressive runs per 90"),              val_of("Progressive runs per 90")[1]),
-    ("Shots",                             pct_of("Shots per 90"),                          val_of("Shots per 90")[1]),
-    ("Shooting Accuracy %",               pct_of("Shots on target, %"),                   f"{int(round(val_of('Shots on target, %')[0]))}%"),
-    ("Successful Attacking Actions %",    pct_of("Successful offensive actions, %") if 'Successful offensive actions, %' in df.columns else 0, ""),
-    ("Touches in box",                    pct_of("Touches in box per 90"),                val_of("Touches in box per 90")[1]),
-]
+# ---------- Build the exact rows from your triples (already available above) ----------
+# Example footer that matches your screenshot pattern:
+pool_name = ", ".join(sorted(set(df_f["League"])))
+pool_size = len(build_pool_df()) if 'build_pool_df' in globals() else len(df_f)
+mins_cut  = int(min_minutes_pool) if 'min_minutes_pool' in globals() else int(min_minutes)
 
-defensive_order = [
-    ("Aerial Duels",                      pct_of("Aerial duels per 90"),                  val_of("Aerial duels per 90")[1]),
-    ("Aerial Win %",                      pct_of("Aerial duels won, %"),                  f"{int(round(val_of('Aerial duels won, %')[0]))}%"),
-    ("Defensive Duels",                   pct_of("Defensive duels per 90"),               val_of("Defensive duels per 90")[1]),
-    ("Defensive Duel Success %",          pct_of("Defensive duels won, %"),               f"{int(round(val_of('Defensive duels won, %')[0]))}%"),
-    ("PAdj. Interceptions",               pct_of("PAdj Interceptions"),                   val_of("PAdj Interceptions")[1]),
-    ("Successful Defensive Actions",      pct_of("Successful defensive actions per 90") if 'Successful defensive actions per 90' in df.columns else 0, val_of("Successful defensive actions per 90")[1] if 'Successful defensive actions per 90' in df.columns else ""),
-]
+footer_str = f"Percentile Rank vs {pool_name} • {pool_size:,} players • minutes filter ≥ {mins_cut}"
 
-possession_order = [
-    ("Accelerations",                     pct_of("Accelerations per 90"),                 val_of("Accelerations per 90")[1]),
-    ("Deep Completions",                  pct_of("Deep completions per 90"),              val_of("Deep completions per 90")[1]),
-    ("Dribbles",                          pct_of("Dribbles per 90"),                      val_of("Dribbles per 90")[1]),
-    ("Dribbling Success %",               pct_of("Successful dribbles, %"),               f"{int(round(val_of('Successful dribbles, %')[0]))}%"),
-    ("Key passes",                        pct_of("Key passes per 90"),                    val_of("Key passes per 90")[1]),
-    ("Passes",                            pct_of("Passes per 90"),                        val_of("Passes per 90")[1]),
-    ("Passing Accuracy %",                pct_of("Accurate passes, %"),                   f"{int(round(val_of('Accurate passes, %')[0]))}%"),
-    ("Passes to Penalty Area",            pct_of("Passes to penalty area per 90"),        val_of("Passes to penalty area per 90")[1]),
-    ("Pass Pen-Area %",                   pct_of("Accurate passes to penalty area, %"),   f"{int(round(val_of('Accurate passes to penalty area, %')[0]))}%"),
-    ("Progressive Runs",                  pct_of("Progressive runs per 90"),              val_of("Progressive runs per 90")[1]),
-    ("Smart Passes",                      pct_of("Smart passes per 90"),                  val_of("Smart passes per 90")[1]),
-]
+fig_replica = draw_replica_panels(ATTACKING, DEFENSIVE, POSSESSION, footer=footer_str)
+st.pyplot(fig_replica, use_container_width=True)
+# ======================== END REPLICA PERCENTILE CHART ==========================
 
-# Build + render
-sections = [
-    ("Attacking",  attacking_order),
-    ("Defensive",  defensive_order),
-    ("Possession", possession_order),
-]
-note = f"Percentile Rank vs {', '.join(sorted(set(build_pool_df()['League']))) if 'build_pool_df' in globals() else player_row.iloc[0]['League']}. • minutes filter ≥ {int(min_minutes_pool) if 'min_minutes_pool' in globals() else int(df['Minutes played'].min())}"
-fig = draw_replica_percentiles(sections, value_labels=None, footer_note=note)
-st.pyplot(fig, use_container_width=True)
-# Optional: download
-from io import BytesIO
-buf = BytesIO(); fig.savefig(buf, format="png", dpi=200, bbox_inches="tight", facecolor=fig.get_facecolor())
-st.download_button("⬇️ Download percentile chart (PNG)", data=buf.getvalue(),
-                   file_name=f"{str(player_name).replace(' ','_')}_percentiles.png", mime="image/png")
-# ==== END REPLICA CHART =========================================================
 
 
 
