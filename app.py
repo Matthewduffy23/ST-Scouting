@@ -1398,8 +1398,6 @@ else:
         # ---- Professional dotted 50% line — guaranteed top→bottom ----
         ax.axvline(50, color="#FFFFFF", ls=(0, (4, 4)), lw=1.5, alpha=0.85, zorder=3.5)
 
-                  linestyles=(0, (4, 4)), linewidth=1.5, alpha=0.8, zorder=3.5)
-
         # Metric labels in left gutter
         for i, (lab, _, _) in enumerate(tuples[::-1]):
             y_fig = (panel_top - header_h - n*row_slot) + ((i + 0.5) * row_slot)
