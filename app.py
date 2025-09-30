@@ -1234,7 +1234,7 @@ if isinstance(role_scores, dict) and role_scores:
 
 # ============================ END — WIDER PANELS, SMALLER CENTER GAP, EXTRA TOP-LEFT PADDING ============================
 
-# ============================ (F) THREE-PANEL PERCENTILE BOARD — UNIFORM ROW HEIGHT (Tableau palette, subtler ticks) ============================
+# ============================ (F) THREE-PANEL PERCENTILE BOARD — Uniform rows + visible gridlines ============================
 from io import BytesIO
 import numpy as np
 import matplotlib.pyplot as plt
@@ -1368,23 +1368,26 @@ else:
             ax.set_xticklabels([f"{t}%" for t in ticks], fontsize=10, fontweight="700", color="#FFFFFF")
             ax.tick_params(
                 axis="x", bottom=True, labelbottom=True,
-                length=2.5, width=0.8, direction="out", colors="#FFFFFF", pad=4
+                length=2, width=0.8, direction="out", colors="#FFFFFF", pad=4
             )
-            # soften tick mark opacity
-            for tl in ax.xaxis.get_ticklines():
-                tl.set_alpha(0.6)
+            for tl in ax.xaxis.get_ticklines(): tl.set_alpha(0.35)  # tiny ticks
         else:
             ax.tick_params(axis="x", bottom=True, labelbottom=False, length=0)
 
-        # Vertical gridlines at each 10th percentile — white @ 10% opacity
-        for t in ticks:
-            ax.axvline(t, color=(1, 1, 1, 0.10), lw=0.9, zorder=0.2)
-
-        # Tracks & bars
-        for i, (lab, pct, val_str) in enumerate(tuples[::-1]):  # reverse for top-first
+        # ---- Tracks (background) ----
+        for i in range(n):
             y = i
             ax.add_patch(plt.Rectangle((0, y - (BAR_FRAC/2)), 100, BAR_FRAC,
                                        color=TRACK, ec="none", zorder=0.5))
+
+        # ---- Vertical gridlines at each 10th percentile (draw ABOVE tracks, BELOW bars) ----
+        for t in ticks:
+            # draw as vlines with explicit y-range so they begin at top of first bar and end at bottom of last
+            ax.vlines(t, -0.5, n - 0.5, colors=(1, 1, 1, 0.16), linewidth=1.0, zorder=0.75)
+
+        # ---- Bars + value labels ----
+        for i, (lab, pct, val_str) in enumerate(tuples[::-1]):  # reverse for top-first
+            y = i
             bar_w = max(0.0, min(100.0, float(pct)))
             ax.add_patch(plt.Rectangle((0, y - (BAR_FRAC/2)), bar_w, BAR_FRAC,
                                        color=pct_to_rgb(bar_w), ec="none", zorder=1.0))
@@ -1392,8 +1395,9 @@ else:
             ax.text(1.0, y, val_str, ha="left", va="center",
                     fontsize=8, fontweight="400", color="#0B0B0B", zorder=2.0)
 
-        # Professional dotted 50% line ABOVE bars
-        ax.axvline(50, color="#FFFFFF", lw=2.0, ls=(0, (4, 4)), alpha=0.8, zorder=3.5)
+        # ---- Professional dotted 50% line — exactly top→bottom of the bar area, OVER the bars ----
+        ax.vlines(50, -0.5, n - 0.5, colors="#FFFFFF",
+                  linestyles=(0, (4, 4)), linewidth=2.0, alpha=0.95, zorder=3.5)
 
         # Metric labels in left gutter
         for i, (lab, _, _) in enumerate(tuples[::-1]):
@@ -1414,9 +1418,9 @@ else:
         is_last = (idx == len(sections) - 1)
         y_top = draw_panel(y_top, title, data, show_xticks=is_last, draw_bottom_divider=not is_last)
 
-    # Bottom caption — nudge lower a few mm
-    fig.text(x_center_plot, bot_margin * 0.30, "Percentile Rank",
-             ha="center", va="center", fontsize=8, fontweight="bold", color=LABEL)
+    # Bottom caption — slightly lower
+    fig.text(x_center_plot, bot_margin * 0.34, "Percentile Rank",
+             ha="center", va="center", fontsize=10, fontweight="bold", color=LABEL)
 
     st.pyplot(fig, use_container_width=True)
 
@@ -1427,7 +1431,8 @@ else:
                        data=buf.getvalue(),
                        file_name=f"{str(player_name).replace(' ','_')}_featureF.png",
                        mime="image/png")
-# ============================ END — Feature F (Tableau palette, subtler ticks) ============================
+# ============================ END — Feature F ============================
+
 
 
 
