@@ -1395,8 +1395,8 @@ else:
             ax.text(1.0, y, val_str, ha="left", va="center",
                     fontsize=8, fontweight="400", color="#0B0B0B", zorder=2.0)
 
-         # ---- Professional dotted 50% line — guaranteed top→bottom ----
-         ax.axvline(50, color="#FFFFFF", ls=(0, (4, 4)), lw=1.5, alpha=0.85, zorder=3.5)
+        # ---- Professional dotted 50% line — guaranteed top→bottom ----
+        ax.axvline(50, color="#FFFFFF", ls=(0, (4, 4)), lw=1.5, alpha=0.85, zorder=3.5)
 
                   linestyles=(0, (4, 4)), linewidth=1.5, alpha=0.8, zorder=3.5)
 
