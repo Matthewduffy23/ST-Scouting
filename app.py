@@ -1368,7 +1368,7 @@ else:
             ax.set_xticklabels([f"{t}%" for t in ticks], fontsize=10, fontweight="700", color="#FFFFFF")
             ax.tick_params(
                 axis="x", bottom=True, labelbottom=True,
-                length=2.5, width=0.8, direction="out", colors="#FFFFFF", pad=4
+                length=3, width=1, direction="out", colors="#FFFFFF", pad=4
             )
             for tl in ax.xaxis.get_ticklines(): tl.set_alpha(0.5)  # tiny ticks
         else:
@@ -1383,7 +1383,7 @@ else:
         # ---- Vertical gridlines at each 10th percentile (draw ABOVE tracks, BELOW bars) ----
         for t in ticks:
             # draw as vlines with explicit y-range so they begin at top of first bar and end at bottom of last
-            ax.vlines(t, -0.5, n - 0.5, colors=(1, 1, 1, 0.16), linewidth=1.0, zorder=0.75)
+            ax.vlines(t, -0.5, n - 0.5, colors=(1, 1, 1, 0.16), linewidth=0.8, zorder=0.75)
 
         # ---- Bars + value labels ----
         for i, (lab, pct, val_str) in enumerate(tuples[::-1]):  # reverse for top-first
