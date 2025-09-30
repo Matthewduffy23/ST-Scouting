@@ -1400,8 +1400,9 @@ else:
             trans = ax.get_xaxis_transform()               # x in data, y in axis coords
             # Adjustable offsets in points (pt) → convert to inches via /72
             INNER_PCT_OFFSET_PT = 7    # keep your “just right” look
-            EDGE_PCT_OFFSET_PT  = 2     # separate knob for 0% and 100%
-
+            EDGE_PCT_OFFSET_PT  = 5     # separate knob for 0% and 100%
+            EDGE_PCT_OFFSET_100_PT = 9 # right edge (100%) → HIGHER = further right
+            
             offset_inner = ScaledTranslation( INNER_PCT_OFFSET_PT/72, 0, fig.dpi_scale_trans)
             offset_0     = ScaledTranslation( EDGE_PCT_OFFSET_PT/72, 0, fig.dpi_scale_trans)   # push % rightwards at 0
             offset_100   = ScaledTranslation(-EDGE_PCT_OFFSET_PT/72, 0, fig.dpi_scale_trans)   # pull % leftwards at 100
