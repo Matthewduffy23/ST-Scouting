@@ -1234,10 +1234,11 @@ if isinstance(role_scores, dict) and role_scores:
 
 # ============================ END — WIDER PANELS, SMALLER CENTER GAP, EXTRA TOP-LEFT PADDING ============================
 
-# ============================ (F) THREE-PANEL PERCENTILE BOARD — Uniform rows + visible gridlines ============================
+# ============================ (F) THREE-PANEL PERCENTILE BOARD — Uniform rows + visible gridlines (ticks centered) ============================
 from io import BytesIO
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker  # << NEW: for perfect tick placement + % formatting
 
 st.markdown("---")
 st.header("📋 Feature F — Percentile Board (uniform rows)")
@@ -1361,16 +1362,24 @@ else:
         ax.set_xlim(0, 100)
         ax.set_ylim(-0.5, n - 0.5)
 
-        # Ticks & labels
-        for s in ax.spines.values(): s.set_visible(False)
-        ax.set_xticks(ticks)
+        # --- Ticks & labels (locator + formatter ensures labels are centered on gridlines) ---
+        for s in ax.spines.values():
+            s.set_visible(False)
+
+        ax.xaxis.set_major_locator(mticker.MultipleLocator(10))
+        ax.xaxis.set_major_formatter(mticker.PercentFormatter(xmax=100, decimals=0))
+
         if show_xticks:
-            ax.set_xticklabels([f"{t}%" for t in ticks], fontsize=10, fontweight="700", color="#FFFFFF")
-            ax.tick_params(
-                axis="x", bottom=True, labelbottom=True,
-                length=3, width=1, direction="out", colors="#FFFFFF", pad=4
-            )
-            for tl in ax.xaxis.get_ticklines(): tl.set_alpha(0.5)  # tiny ticks
+            ax.tick_params(axis="x",
+                           bottom=True, labelbottom=True,
+                           length=3, width=1,  # tiny ticks
+                           direction="out", colors="#FFFFFF", pad=4)
+            # style labels
+            for t in ax.get_xticklabels():
+                t.set_horizontalalignment("center")
+                t.set_fontsize(10)
+                t.set_fontweight("700")
+                t.set_color("#FFFFFF")
         else:
             ax.tick_params(axis="x", bottom=True, labelbottom=False, length=0)
 
@@ -1380,10 +1389,9 @@ else:
             ax.add_patch(plt.Rectangle((0, y - (BAR_FRAC/2)), 100, BAR_FRAC,
                                        color=TRACK, ec="none", zorder=0.5))
 
-        # ---- Vertical gridlines at each 10th percentile (draw ABOVE tracks, BELOW bars) ----
-        for t in ticks:
-            # draw as vlines with explicit y-range so they begin at top of first bar and end at bottom of last
-            ax.vlines(t, -0.5, n - 0.5, colors=(1, 1, 1, 0.16), linewidth=0.8, zorder=0.75)
+        # ---- Vertical gridlines at each major tick (10%) ----
+        for gx in ax.get_xticks():
+            ax.axvline(gx, color=(1, 1, 1, 0.16), linewidth=0.8, zorder=0.75)
 
         # ---- Bars + value labels ----
         for i, (lab, pct, val_str) in enumerate(tuples[::-1]):  # reverse for top-first
@@ -1395,7 +1403,7 @@ else:
             ax.text(1.0, y, val_str, ha="left", va="center",
                     fontsize=8, fontweight="400", color="#0B0B0B", zorder=2.0)
 
-        # ---- Professional dotted 50% line — guaranteed top→bottom ----
+        # ---- Professional dotted 50% line — top→bottom over bars ----
         ax.axvline(50, color="#FFFFFF", ls=(0, (4, 4)), lw=1.5, alpha=0.85, zorder=3.5)
 
         # Metric labels in left gutter
