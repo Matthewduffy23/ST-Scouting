@@ -1234,7 +1234,7 @@ if isinstance(role_scores, dict) and role_scores:
 
 # ============================ END — WIDER PANELS, SMALLER CENTER GAP, EXTRA TOP-LEFT PADDING ============================
 
-# ============================ (F) THREE-PANEL PERCENTILE BOARD — UNIFORM ROW HEIGHT (Tableau palette, tweaks) ============================
+# ============================ (F) THREE-PANEL PERCENTILE BOARD — UNIFORM ROW HEIGHT (Tableau palette, subtler ticks) ============================
 from io import BytesIO
 import numpy as np
 import matplotlib.pyplot as plt
@@ -1299,9 +1299,9 @@ else:
     TRACK   = "#1c2635"
     TITLE   = "#f3f5f7"
     LABEL   = "#e8eef8"
-    DIVIDER = "#ffffff"   # section borders
+    DIVIDER = "#ffffff"
 
-    # ===== Tableau Public "Red–Gold–Green Diverging" (0→red, 50→gold, 100→green) =====
+    # Tableau-like diverging ramp (0→red, 50→gold, 100→green)
     TAB_RED   = np.array([199, 54, 60], dtype=float)    # #C7363C
     TAB_GOLD  = np.array([240, 197, 106], dtype=float)  # #F0C56A
     TAB_GREEN = np.array([61, 166, 91], dtype=float)    # #3DA65B
@@ -1312,9 +1312,7 @@ else:
 
     def pct_to_rgb(v):
         v = float(np.clip(v, 0, 100))
-        if v <= 50:
-            return _blend(TAB_RED, TAB_GOLD, v/50.0)
-        return _blend(TAB_GOLD, TAB_GREEN, (v-50.0)/50.0)
+        return _blend(TAB_RED, TAB_GOLD, v/50.0) if v <= 50 else _blend(TAB_GOLD, TAB_GREEN, (v-50.0)/50.0)
 
     # ----- layout: identical bar height across all sections -----
     total_rows = sum(len(lst) for _, lst in sections)
@@ -1332,7 +1330,7 @@ else:
     row_slot = rows_space_total / max(total_rows, 1)
     BAR_FRAC = 0.80
 
-    # label gutter width (measure once)
+    # label gutter width
     probe = fig.text(0, 0, "Successful Defensive Actions", fontsize=11, fontweight="bold", color=LABEL, alpha=0)
     fig.canvas.draw()
     lab_w = probe.get_window_extent(renderer=fig.canvas.get_renderer()).width / fig.bbox.width
@@ -1341,7 +1339,7 @@ else:
 
     ticks = np.arange(0, 101, 10)
 
-    # Compute visual center of the plot area (for bottom caption)
+    # visual center for footer text
     x_center_plot = (left_margin + gutter + (1 - right_margin)) / 2.0
 
     def draw_panel(panel_top, title, tuples, *, show_xticks=False, draw_bottom_divider=True):
@@ -1352,7 +1350,7 @@ else:
         fig.text(left_margin, panel_top - 0.012, title, ha="left", va="top",
                  fontsize=20, fontweight="900", color=TITLE)
 
-        # Axis for bars
+        # Bars axis
         ax = fig.add_axes([
             left_margin + gutter,
             panel_top - header_h - n*row_slot,
@@ -1368,17 +1366,19 @@ else:
         ax.set_xticks(ticks)
         if show_xticks:
             ax.set_xticklabels([f"{t}%" for t in ticks], fontsize=10, fontweight="700", color="#FFFFFF")
-            # little tick marks under labels
             ax.tick_params(
                 axis="x", bottom=True, labelbottom=True,
-                length=5, width=1.0, direction="out", colors="#FFFFFF"
+                length=2, width=0.8, direction="out", colors="#FFFFFF", pad=4
             )
+            # soften tick mark opacity
+            for tl in ax.xaxis.get_ticklines():
+                tl.set_alpha(0.35)
         else:
             ax.tick_params(axis="x", bottom=True, labelbottom=False, length=0)
 
-        # Vertical gridlines at each 10% (keep), no horizontal gridlines
+        # Vertical gridlines at each 10th percentile — white @ 10% opacity
         for t in ticks:
-            ax.axvline(t, color="#FFFFFF", lw=0.9, alpha=0.10, zorder=0.15)
+            ax.axvline(t, color=(1, 1, 1, 0.10), lw=0.9, zorder=0.2)
 
         # Tracks & bars
         for i, (lab, pct, val_str) in enumerate(tuples[::-1]):  # reverse for top-first
@@ -1414,8 +1414,8 @@ else:
         is_last = (idx == len(sections) - 1)
         y_top = draw_panel(y_top, title, data, show_xticks=is_last, draw_bottom_divider=not is_last)
 
-    # Bottom caption — centered under plotted area
-    fig.text(x_center_plot, bot_margin * 0.55, "Percentile Rank",
+    # Bottom caption — nudge lower a few mm
+    fig.text(x_center_plot, bot_margin * 0.34, "Percentile Rank",
              ha="center", va="center", fontsize=10, fontweight="bold", color=LABEL)
 
     st.pyplot(fig, use_container_width=True)
@@ -1427,7 +1427,7 @@ else:
                        data=buf.getvalue(),
                        file_name=f"{str(player_name).replace(' ','_')}_featureF.png",
                        mime="image/png")
-# ============================ END — Feature F (Tableau palette, tweaks) ============================
+# ============================ END — Feature F (Tableau palette, subtler ticks) ============================
 
 
 
