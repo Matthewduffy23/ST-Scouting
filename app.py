@@ -1419,11 +1419,12 @@ else:
                 # add '%' with custom offsets at the edges
                 if gx == 0:
                     ax.text(gx, y_label, "%", transform=trans + offset_0,
-                            ha="left", va="top", fontsize=10, fontweight="700",
+                            ha="left", va="top", fontsize=9, fontweight="700",
                             color="#FFFFFF", zorder=4, clip_on=False)
                 elif gx == 100:
+                    offset_100 = ScaledTranslation(EDGE_PCT_OFFSET_100_PT / 72, 5, fig.dpi_scale_trans),
                     ax.text(gx, y_label, "%", transform=trans + offset_100,
-                            ha="right", va="top", fontsize=9, fontweight="700",
+                            ha="left", va="top", fontsize=9, fontweight="700",
                             color="#FFFFFF", zorder=4, clip_on=False)
                 else:
                     ax.text(gx, y_label, "%", transform=trans + offset_inner,
