@@ -1412,24 +1412,24 @@ else:
 
             for gx in ticks:
                 # tiny tick mark
-                ax.plot([gx, gx], [-0.02, 0.0], transform=trans,
-                        color=(1, 1, 1, 0.6), lw=1.0, clip_on=False, zorder=4)
+                ax.plot([gx, gx], [-0.04, 0.0], transform=trans,
+                        color=(1, 1, 1, 0.6), lw=1.4, clip_on=False, zorder=4)
                 # number centered on gridline
                 ax.text(gx, y_label, f"{int(gx)}", transform=trans,
-                        ha="center", va="top", fontsize=9, fontweight="700",
+                        ha="center", va="top", fontsize=10, fontweight="700",
                         color="#FFFFFF", zorder=4, clip_on=False)
                 # percent sign with custom offsets
                 if gx == 0:
                     ax.text(gx, y_label, "%", transform=trans + offset_pct_0,
-                            ha="left", va="top", fontsize=9, fontweight="700",
+                            ha="left", va="top", fontsize=10, fontweight="700",
                             color="#FFFFFF", zorder=4, clip_on=False)
                 elif gx == 100:
                     ax.text(gx, y_label, "%", transform=trans + offset_pct_100,
-                            ha="left", va="top", fontsize=9, fontweight="700",
+                            ha="left", va="top", fontsize=10, fontweight="700",
                             color="#FFFFFF", zorder=4, clip_on=False)
                 else:
                     ax.text(gx, y_label, "%", transform=trans + offset_inner,
-                            ha="left", va="top", fontsize=9, fontweight="700",
+                            ha="left", va="top", fontsize=10, fontweight="700",
                             color="#FFFFFF", zorder=4, clip_on=False)
 
         # Section divider
