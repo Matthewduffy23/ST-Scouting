@@ -1395,23 +1395,19 @@ else:
             fig.text(left_margin, y_fig, lab, ha="left", va="center",
                      fontsize=10, fontweight="bold", color=LABEL)
 
-        # ---- Manually centered bottom ticks ONLY on last panel ----
-        if show_xticks:
-            trans = ax.get_xaxis_transform()               # x in data, y in axis coords
-            offset_px = ScaledTranslation(7/72, 0, fig.dpi_scale_trans)  # ~2px to the right for the '%'
-            y_label = -0.075
-            # tiny tick marks
-            for gx in ticks:
-                ax.plot([gx, gx], [-0.02, 0.0], transform=trans, color=(1, 1, 1, 0.6),
-                        lw=1.0, clip_on=False, zorder=4)
-                # center the number EXACTLY on the gridline
-                ax.text(gx, y_label, f"{int(gx)}", transform=trans,
-                        ha="center", va="top", fontsize=10, fontweight="700",
-                        color="#FFFFFF", zorder=4)
-                # add '%' with a tiny pixel offset so digits stay visually centered
-                ax.text(gx, y_label, "%", transform=trans + offset_px,
-                        ha="left", va="top", fontsize=10, fontweight="700",
-                        color="#FFFFFF", zorder=4)
+# --- Custom tick label alignment ---
+for label in ax.get_xticklabels():
+    text = label.get_text()
+    if text == "0%":
+        # Nudge slightly *right* (smaller offset)
+        label.set_transform(label.get_transform() + ScaledTranslation(1/72, 0, fig.dpi_scale_trans))
+    elif text == "100%":
+        # Nudge slightly *left* (smaller offset)
+        label.set_transform(label.get_transform() + ScaledTranslation(-1/72, 0, fig.dpi_scale_trans))
+    else:
+        # Middle ticks: normal offset (~2px)
+        label.set_transform(label.get_transform() + ScaledTranslation(2/72, 0, fig.dpi_scale_trans))
+
 
         # Section divider
         if draw_bottom_divider:
