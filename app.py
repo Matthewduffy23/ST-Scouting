@@ -1368,11 +1368,11 @@ else:
             ax.set_xticklabels([f"{t}%" for t in ticks], fontsize=10, fontweight="700", color="#FFFFFF")
             ax.tick_params(
                 axis="x", bottom=True, labelbottom=True,
-                length=2, width=0.8, direction="out", colors="#FFFFFF", pad=4
+                length=2.5, width=0.8, direction="out", colors="#FFFFFF", pad=4
             )
             # soften tick mark opacity
             for tl in ax.xaxis.get_ticklines():
-                tl.set_alpha(0.35)
+                tl.set_alpha(0.6)
         else:
             ax.tick_params(axis="x", bottom=True, labelbottom=False, length=0)
 
@@ -1393,7 +1393,7 @@ else:
                     fontsize=8, fontweight="400", color="#0B0B0B", zorder=2.0)
 
         # Professional dotted 50% line ABOVE bars
-        ax.axvline(50, color="#FFFFFF", lw=2.0, ls=(0, (4, 4)), alpha=0.95, zorder=3.5)
+        ax.axvline(50, color="#FFFFFF", lw=2.0, ls=(0, (4, 4)), alpha=0.8, zorder=3.5)
 
         # Metric labels in left gutter
         for i, (lab, _, _) in enumerate(tuples[::-1]):
@@ -1415,8 +1415,8 @@ else:
         y_top = draw_panel(y_top, title, data, show_xticks=is_last, draw_bottom_divider=not is_last)
 
     # Bottom caption — nudge lower a few mm
-    fig.text(x_center_plot, bot_margin * 0.34, "Percentile Rank",
-             ha="center", va="center", fontsize=10, fontweight="bold", color=LABEL)
+    fig.text(x_center_plot, bot_margin * 0.30, "Percentile Rank",
+             ha="center", va="center", fontsize=8, fontweight="bold", color=LABEL)
 
     st.pyplot(fig, use_container_width=True)
 
