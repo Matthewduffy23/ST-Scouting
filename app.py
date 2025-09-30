@@ -1234,7 +1234,7 @@ if isinstance(role_scores, dict) and role_scores:
 
 # ============================ END — WIDER PANELS, SMALLER CENTER GAP, EXTRA TOP-LEFT PADDING ============================
 
-# ============================ (F) THREE-PANEL PERCENTILE BOARD — UNIFORM ROW HEIGHT (Tableau palette) ============================
+# ============================ (F) THREE-PANEL PERCENTILE BOARD — UNIFORM ROW HEIGHT (Tableau palette, tweaks) ============================
 from io import BytesIO
 import numpy as np
 import matplotlib.pyplot as plt
@@ -1301,27 +1301,20 @@ else:
     LABEL   = "#e8eef8"
     DIVIDER = "#ffffff"   # section borders
 
-    # ===== Tableau Public "Red–Green–Gold Diverging" look (0→red, 50→gold, 100→green) =====
-    # Stops tuned to match Tableau’s default feel (slightly desaturated, smooth blend)
-    TAB_RED   = np.array([199, 54, 60], dtype=float)   # #C7363C
-    TAB_GOLD  = np.array([240, 197, 106], dtype=float) # #F0C56A
-    TAB_GREEN = np.array([61, 166, 91], dtype=float)   # #3DA65B
+    # ===== Tableau Public "Red–Gold–Green Diverging" (0→red, 50→gold, 100→green) =====
+    TAB_RED   = np.array([199, 54, 60], dtype=float)    # #C7363C
+    TAB_GOLD  = np.array([240, 197, 106], dtype=float)  # #F0C56A
+    TAB_GREEN = np.array([61, 166, 91], dtype=float)    # #3DA65B
 
     def _blend(c1, c2, t):
         c = c1 + (c2 - c1) * np.clip(t, 0.0, 1.0)
         return f"#{int(c[0]):02x}{int(c[1]):02x}{int(c[2]):02x}"
 
     def pct_to_rgb(v):
-        """Smooth 0–100 → red→gold→green, like Tableau."""
         v = float(np.clip(v, 0, 100))
         if v <= 50:
-            # 0..50 : red → gold
-            t = v / 50.0
-            return _blend(TAB_RED, TAB_GOLD, t)
-        else:
-            # 50..100 : gold → green
-            t = (v - 50.0) / 50.0
-            return _blend(TAB_GOLD, TAB_GREEN, t)
+            return _blend(TAB_RED, TAB_GOLD, v/50.0)
+        return _blend(TAB_GOLD, TAB_GREEN, (v-50.0)/50.0)
 
     # ----- layout: identical bar height across all sections -----
     total_rows = sum(len(lst) for _, lst in sections)
@@ -1340,8 +1333,7 @@ else:
     BAR_FRAC = 0.80
 
     # label gutter width (measure once)
-    probe = fig.text(0, 0, "Successful Defensive Actions", fontsize=11, fontweight="bold",
-                     color=LABEL, alpha=0)
+    probe = fig.text(0, 0, "Successful Defensive Actions", fontsize=11, fontweight="bold", color=LABEL, alpha=0)
     fig.canvas.draw()
     lab_w = probe.get_window_extent(renderer=fig.canvas.get_renderer()).width / fig.bbox.width
     probe.remove()
@@ -1376,27 +1368,32 @@ else:
         ax.set_xticks(ticks)
         if show_xticks:
             ax.set_xticklabels([f"{t}%" for t in ticks], fontsize=10, fontweight="700", color="#FFFFFF")
-            ax.tick_params(left=False, labelleft=False, bottom=True, labelbottom=True)
+            # little tick marks under labels
+            ax.tick_params(
+                axis="x", bottom=True, labelbottom=True,
+                length=5, width=1.0, direction="out", colors="#FFFFFF"
+            )
         else:
-            ax.tick_params(left=False, labelleft=False, bottom=True, labelbottom=False)
+            ax.tick_params(axis="x", bottom=True, labelbottom=False, length=0)
 
-        # Gridlines (10% vertical & row separators) + strong 50% reference
+        # Vertical gridlines at each 10% (keep), no horizontal gridlines
         for t in ticks:
             ax.axvline(t, color="#FFFFFF", lw=0.9, alpha=0.10, zorder=0.15)
-        ax.axvline(50, color="#FFFFFF", lw=1.6, ls=(0, (4, 4)), alpha=0.95, zorder=0.3)
-        for ysep in range(n + 1):
-            ax.axhline(ysep - 0.5, color="#FFFFFF", lw=0.9, alpha=0.10, zorder=0.15)
 
-        # Tracks, bars, and value labels (inside-left, small black)
+        # Tracks & bars
         for i, (lab, pct, val_str) in enumerate(tuples[::-1]):  # reverse for top-first
             y = i
             ax.add_patch(plt.Rectangle((0, y - (BAR_FRAC/2)), 100, BAR_FRAC,
-                                       color=TRACK, ec="none", zorder=0.1))
+                                       color=TRACK, ec="none", zorder=0.5))
             bar_w = max(0.0, min(100.0, float(pct)))
             ax.add_patch(plt.Rectangle((0, y - (BAR_FRAC/2)), bar_w, BAR_FRAC,
-                                       color=pct_to_rgb(bar_w), ec="none", zorder=0.9))
+                                       color=pct_to_rgb(bar_w), ec="none", zorder=1.0))
+            # inside-left value (small, black)
             ax.text(1.0, y, val_str, ha="left", va="center",
-                    fontsize=8, fontweight="400", color="#0B0B0B", zorder=1.1)
+                    fontsize=8, fontweight="400", color="#0B0B0B", zorder=2.0)
+
+        # Professional dotted 50% line ABOVE bars
+        ax.axvline(50, color="#FFFFFF", lw=2.0, ls=(0, (4, 4)), alpha=0.95, zorder=3.5)
 
         # Metric labels in left gutter
         for i, (lab, _, _) in enumerate(tuples[::-1]):
@@ -1404,11 +1401,11 @@ else:
             fig.text(left_margin, y_fig, lab, ha="left", va="center",
                      fontsize=10, fontweight="bold", color=LABEL)
 
-        # Section divider (adjust thickness/opacity here if you want a different feel)
+        # Section divider
         if draw_bottom_divider:
             y0 = panel_top - panel_h - 0.008
             fig.lines.append(plt.Line2D([left_margin, 1 - right_margin], [y0, y0],
-                                        transform=fig.transFigure, color=DIVIDER, lw=1, alpha=0.95))
+                                        transform=fig.transFigure, color=DIVIDER, lw=1.2, alpha=0.95))
         return panel_top - panel_h - gap_between
 
     # Render panels; only the last shows tick labels
@@ -1430,7 +1427,8 @@ else:
                        data=buf.getvalue(),
                        file_name=f"{str(player_name).replace(' ','_')}_featureF.png",
                        mime="image/png")
-# ============================ END — Feature F (Tableau palette) ============================
+# ============================ END — Feature F (Tableau palette, tweaks) ============================
+
 
 
 
