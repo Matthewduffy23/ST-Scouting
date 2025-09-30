@@ -1401,8 +1401,8 @@ else:
 
             # Adjustable offsets in points (pt) → convert to inches via /72
             INNER_PCT_OFFSET_PT    = 7   # offset for the "%" on inner ticks (keeps digits visually centered)
-            EDGE_PCT_OFFSET_0_PT   = 4.5   # offset for "%" at 0  (push right)
-            EDGE_PCT_OFFSET_100_PT = 9.5   # offset for "%" at 100 (push right)
+            EDGE_PCT_OFFSET_0_PT   = 4   # offset for "%" at 0  (push right)
+            EDGE_PCT_OFFSET_100_PT = 10   # offset for "%" at 100 (push right)
 
             offset_inner = ScaledTranslation(INNER_PCT_OFFSET_PT/72, 0, fig.dpi_scale_trans)
             offset_pct_0 = ScaledTranslation(EDGE_PCT_OFFSET_0_PT/72, 0, fig.dpi_scale_trans)
