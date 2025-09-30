@@ -1234,7 +1234,7 @@ if isinstance(role_scores, dict) and role_scores:
 
 # ============================ END — WIDER PANELS, SMALLER CENTER GAP, EXTRA TOP-LEFT PADDING ============================
 
-# ============================ (F) THREE-PANEL PERCENTILE BOARD — Uniform rows + centred ticks ============================
+# ============================ (F) THREE-PANEL PERCENTILE BOARD — Uniform rows + centered % ticks ============================
 from io import BytesIO
 import numpy as np
 import matplotlib.pyplot as plt
@@ -1246,7 +1246,7 @@ st.header("📋 Feature F — Percentile Board (uniform rows)")
 if player_row.empty:
     st.info("Pick a player above.")
 else:
-    # ----- assemble sections -----
+    # ----- assemble sections from your existing calcs -----
     ATTACKING = []
     for lab, met in [
         ("Crosses", "Crosses per 90"),
@@ -1294,7 +1294,7 @@ else:
     sections = [("Attacking", ATTACKING), ("Defensive", DEFENSIVE), ("Possession", POSSESSION)]
     sections = [(t, lst) for t, lst in sections if lst]
 
-    # ----- styling -----
+    # ----- styling (dark Tableau-ish canvas) -----
     PAGE_BG = "#0a0f1c"
     AX_BG   = "#0f151f"
     TRACK   = "#1c2635"
@@ -1302,6 +1302,7 @@ else:
     LABEL   = "#e8eef8"
     DIVIDER = "#ffffff"
 
+    # Tableau-like diverging ramp (0→red, 50→gold, 100→green)
     TAB_RED   = np.array([199, 54, 60], dtype=float)    # #C7363C
     TAB_GOLD  = np.array([240, 197, 106], dtype=float)  # #F0C56A
     TAB_GREEN = np.array([61, 166, 91], dtype=float)    # #3DA65B
@@ -1314,9 +1315,25 @@ else:
         v = float(np.clip(v, 0, 100))
         return _blend(TAB_RED, TAB_GOLD, v/50.0) if v <= 50 else _blend(TAB_GOLD, TAB_GREEN, (v-50.0)/50.0)
 
-    # ----- layout -----
+    # --- helper: center xtick labels under their gridlines (pixel-perfect) ---
+    def _center_xtick_labels(ax, fig):
+        fig.canvas.draw()
+        rend = fig.canvas.get_renderer()
+        xs = ax.get_xticks()
+        labels = ax.get_xticklabels()
+        for x, label in zip(xs, labels):
+            tick_x_px = ax.transData.transform((x, 0))[0]
+            bb = label.get_window_extent(renderer=rend)
+            label_center_px = 0.5 * (bb.x0 + bb.x1)
+            dx_px = tick_x_px - label_center_px
+            label.set_transform(
+                label.get_transform()
+                + ScaledTranslation(dx_px / fig.dpi, 0, fig.dpi_scale_trans)
+            )
+
+    # ----- layout: identical bar height across all sections -----
     total_rows = sum(len(lst) for _, lst in sections)
-    fig = plt.figure(figsize=(10, 8), dpi=100)
+    fig = plt.figure(figsize=(10, 8), dpi=100)  # 1000x800 px
     fig.patch.set_facecolor(PAGE_BG)
 
     left_margin  = 0.035
@@ -1330,6 +1347,7 @@ else:
     row_slot = rows_space_total / max(total_rows, 1)
     BAR_FRAC = 0.80
 
+    # label gutter width
     probe = fig.text(0, 0, "Successful Defensive Actions", fontsize=11, fontweight="bold", color=LABEL, alpha=0)
     fig.canvas.draw()
     lab_w = probe.get_window_extent(renderer=fig.canvas.get_renderer()).width / fig.bbox.width
@@ -1337,15 +1355,19 @@ else:
     gutter = min(0.28, lab_w + 0.02)
 
     ticks = np.arange(0, 101, 10)
+
+    # visual center for footer text
     x_center_plot = (left_margin + gutter + (1 - right_margin)) / 2.0
 
     def draw_panel(panel_top, title, tuples, *, show_xticks=False, draw_bottom_divider=True):
         n = len(tuples)
         panel_h = header_h + n * row_slot
 
+        # Section title
         fig.text(left_margin, panel_top - 0.012, title, ha="left", va="top",
                  fontsize=20, fontweight="900", color=TITLE)
 
+        # Bars axis
         ax = fig.add_axes([
             left_margin + gutter,
             panel_top - header_h - n*row_slot,
@@ -1356,7 +1378,7 @@ else:
         ax.set_xlim(0, 100)
         ax.set_ylim(-0.5, n - 0.5)
 
-        # ---- Ticks & labels ----
+        # Ticks & labels
         for s in ax.spines.values(): s.set_visible(False)
         ax.set_xticks(ticks)
         if show_xticks:
@@ -1365,42 +1387,35 @@ else:
                 axis="x", bottom=True, labelbottom=True,
                 length=3, width=1, direction="out", colors="#FFFFFF", pad=4
             )
-            for tl in ax.xaxis.get_ticklines(): tl.set_alpha(0.5)
-
-            # ---- Adjust % offsets individually ----
-            for label in ax.get_xticklabels():
-                text = label.get_text()
-                if text == "0%":
-                    label.set_transform(label.get_transform() + ScaledTranslation(5/72, 0, fig.dpi_scale_trans))
-                elif text == "100%":
-                    label.set_transform(label.get_transform() + ScaledTranslation(8/72, 0, fig.dpi_scale_trans))
-                else:
-                    label.set_transform(label.get_transform() + ScaledTranslation(7/72, 0, fig.dpi_scale_trans))
+            for tl in ax.xaxis.get_ticklines(): tl.set_alpha(0.5)  # tiny ticks
+            _center_xtick_labels(ax, fig)  # pixel-perfect centering under gridlines
         else:
             ax.tick_params(axis="x", bottom=True, labelbottom=False, length=0)
 
-        # ---- Tracks ----
+        # ---- Tracks (background) ----
         for i in range(n):
-            ax.add_patch(plt.Rectangle((0, i - (BAR_FRAC/2)), 100, BAR_FRAC,
+            y = i
+            ax.add_patch(plt.Rectangle((0, y - (BAR_FRAC/2)), 100, BAR_FRAC,
                                        color=TRACK, ec="none", zorder=0.5))
 
-        # ---- Vertical gridlines ----
+        # ---- Vertical gridlines at each 10th percentile (above tracks, below bars) ----
         for t in ticks:
             ax.vlines(t, -0.5, n - 0.5, colors=(1, 1, 1, 0.16), linewidth=0.8, zorder=0.75)
 
-        # ---- Bars ----
-        for i, (lab, pct, val_str) in enumerate(tuples[::-1]):
+        # ---- Bars + value labels ----
+        for i, (lab, pct, val_str) in enumerate(tuples[::-1]):  # reverse for top-first
             y = i
             bar_w = max(0.0, min(100.0, float(pct)))
             ax.add_patch(plt.Rectangle((0, y - (BAR_FRAC/2)), bar_w, BAR_FRAC,
                                        color=pct_to_rgb(bar_w), ec="none", zorder=1.0))
+            # inside-left value (small, black)
             ax.text(1.0, y, val_str, ha="left", va="center",
                     fontsize=8, fontweight="400", color="#0B0B0B", zorder=2.0)
 
-        # ---- Dotted 50% line ----
+        # ---- Professional dotted 50% line — top→bottom, over the bars ----
         ax.axvline(50, color="#FFFFFF", ls=(0, (4, 4)), lw=1.5, alpha=0.85, zorder=3.5)
 
-        # Metric labels
+        # Metric labels in left gutter
         for i, (lab, _, _) in enumerate(tuples[::-1]):
             y_fig = (panel_top - header_h - n*row_slot) + ((i + 0.5) * row_slot)
             fig.text(left_margin, y_fig, lab, ha="left", va="center",
@@ -1413,19 +1428,19 @@ else:
                                         transform=fig.transFigure, color=DIVIDER, lw=1.2, alpha=0.95))
         return panel_top - panel_h - gap_between
 
-    # ---- Render all panels ----
+    # Render panels; only the last shows tick labels
     y_top = 1 - top_margin
     for idx, (title, data) in enumerate(sections):
         is_last = (idx == len(sections) - 1)
         y_top = draw_panel(y_top, title, data, show_xticks=is_last, draw_bottom_divider=not is_last)
 
-    # ---- Footer ----
+    # Bottom caption — slightly lower
     fig.text(x_center_plot, bot_margin * 0.38, "Percentile Rank",
              ha="center", va="center", fontsize=11, fontweight="bold", color=LABEL)
 
     st.pyplot(fig, use_container_width=True)
 
-    # ---- Download ----
+    # download
     buf = BytesIO()
     fig.savefig(buf, format="png", dpi=130, bbox_inches="tight", facecolor=fig.get_facecolor())
     st.download_button("⬇️ Download Feature F (PNG)",
@@ -1433,6 +1448,7 @@ else:
                        file_name=f"{str(player_name).replace(' ','_')}_featureF.png",
                        mime="image/png")
 # ============================ END — Feature F ============================
+
 
 # ----------------- (A) SCATTERPLOT — Goals vs xG -----------------
 st.markdown("---")
