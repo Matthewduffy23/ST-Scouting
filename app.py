@@ -1398,7 +1398,7 @@ else:
         # ---- Manually centered bottom ticks ONLY on last panel ----
         if show_xticks:
             trans = ax.get_xaxis_transform()               # x in data, y in axis coords
-            offset_px = ScaledTranslation(3/72, 0, fig.dpi_scale_trans)  # ~2px to the right for the '%'
+            offset_px = ScaledTranslation(5/72, 0, fig.dpi_scale_trans)  # ~2px to the right for the '%'
             y_label = -0.075
             # tiny tick marks
             for gx in ticks:
