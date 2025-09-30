@@ -1234,11 +1234,11 @@ if isinstance(role_scores, dict) and role_scores:
 
 # ============================ END — WIDER PANELS, SMALLER CENTER GAP, EXTRA TOP-LEFT PADDING ============================
 
-# ============================ (F) THREE-PANEL PERCENTILE BOARD — Uniform rows + centered % ticks ============================
+# ============================ (F) THREE-PANEL PERCENTILE BOARD — Uniform rows + visible gridlines (numbers centered; custom % at 0/100) ============================
 from io import BytesIO
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.transforms import ScaledTranslation
+from matplotlib.transforms import ScaledTranslation  # pixel-like offsets
 
 st.markdown("---")
 st.header("📋 Feature F — Percentile Board (uniform rows)")
@@ -1315,22 +1315,6 @@ else:
         v = float(np.clip(v, 0, 100))
         return _blend(TAB_RED, TAB_GOLD, v/50.0) if v <= 50 else _blend(TAB_GOLD, TAB_GREEN, (v-50.0)/50.0)
 
-    # --- helper: center xtick labels under their gridlines (pixel-perfect) ---
-    def _center_xtick_labels(ax, fig):
-        fig.canvas.draw()
-        rend = fig.canvas.get_renderer()
-        xs = ax.get_xticks()
-        labels = ax.get_xticklabels()
-        for x, label in zip(xs, labels):
-            tick_x_px = ax.transData.transform((x, 0))[0]
-            bb = label.get_window_extent(renderer=rend)
-            label_center_px = 0.5 * (bb.x0 + bb.x1)
-            dx_px = tick_x_px - label_center_px
-            label.set_transform(
-                label.get_transform()
-                + ScaledTranslation(dx_px / fig.dpi, 0, fig.dpi_scale_trans)
-            )
-
     # ----- layout: identical bar height across all sections -----
     total_rows = sum(len(lst) for _, lst in sections)
     fig = plt.figure(figsize=(10, 8), dpi=100)  # 1000x800 px
@@ -1354,7 +1338,7 @@ else:
     probe.remove()
     gutter = min(0.28, lab_w + 0.02)
 
-    ticks = np.arange(0, 101, 10)
+    ticks = np.arange(0, 101, 10)  # 0,10,...,100
 
     # visual center for footer text
     x_center_plot = (left_margin + gutter + (1 - right_margin)) / 2.0
@@ -1378,29 +1362,20 @@ else:
         ax.set_xlim(0, 100)
         ax.set_ylim(-0.5, n - 0.5)
 
-        # Ticks & labels
-        for s in ax.spines.values(): s.set_visible(False)
-        ax.set_xticks(ticks)
-        if show_xticks:
-            ax.set_xticklabels([f"{t}%" for t in ticks], fontsize=10, fontweight="700", color="#FFFFFF")
-            ax.tick_params(
-                axis="x", bottom=True, labelbottom=True,
-                length=3, width=1, direction="out", colors="#FFFFFF", pad=4
-            )
-            for tl in ax.xaxis.get_ticklines(): tl.set_alpha(0.5)  # tiny ticks
-            _center_xtick_labels(ax, fig)  # pixel-perfect centering under gridlines
-        else:
-            ax.tick_params(axis="x", bottom=True, labelbottom=False, length=0)
+        # Hide default spines/ticks; draw custom
+        for s in ax.spines.values():
+            s.set_visible(False)
+        ax.tick_params(axis="x", bottom=False, labelbottom=False, length=0)
 
-        # ---- Tracks (background) ----
+        # ---- Tracks ----
         for i in range(n):
             y = i
             ax.add_patch(plt.Rectangle((0, y - (BAR_FRAC/2)), 100, BAR_FRAC,
                                        color=TRACK, ec="none", zorder=0.5))
 
-        # ---- Vertical gridlines at each 10th percentile (above tracks, below bars) ----
-        for t in ticks:
-            ax.vlines(t, -0.5, n - 0.5, colors=(1, 1, 1, 0.16), linewidth=0.8, zorder=0.75)
+        # ---- Vertical gridlines at each 10% ----
+        for gx in ticks:
+            ax.vlines(gx, -0.5, n - 0.5, colors=(1, 1, 1, 0.16), linewidth=0.8, zorder=0.75)
 
         # ---- Bars + value labels ----
         for i, (lab, pct, val_str) in enumerate(tuples[::-1]):  # reverse for top-first
@@ -1408,11 +1383,10 @@ else:
             bar_w = max(0.0, min(100.0, float(pct)))
             ax.add_patch(plt.Rectangle((0, y - (BAR_FRAC/2)), bar_w, BAR_FRAC,
                                        color=pct_to_rgb(bar_w), ec="none", zorder=1.0))
-            # inside-left value (small, black)
             ax.text(1.0, y, val_str, ha="left", va="center",
                     fontsize=8, fontweight="400", color="#0B0B0B", zorder=2.0)
 
-        # ---- Professional dotted 50% line — top→bottom, over the bars ----
+        # ---- Dotted 50% reference line (over bars) ----
         ax.axvline(50, color="#FFFFFF", ls=(0, (4, 4)), lw=1.5, alpha=0.85, zorder=3.5)
 
         # Metric labels in left gutter
@@ -1420,6 +1394,40 @@ else:
             y_fig = (panel_top - header_h - n*row_slot) + ((i + 0.5) * row_slot)
             fig.text(left_margin, y_fig, lab, ha="left", va="center",
                      fontsize=10, fontweight="bold", color=LABEL)
+
+        # ---- Manually centered bottom ticks ONLY on last panel ----
+        if show_xticks:
+            trans = ax.get_xaxis_transform()               # x in data, y in axis coords
+            # Adjustable offsets in points (pt) → convert to inches via /72
+            INNER_PCT_OFFSET_PT = 7    # keep your “just right” look
+            EDGE_PCT_OFFSET_PT  = 2     # separate knob for 0% and 100%
+
+            offset_inner = ScaledTranslation( INNER_PCT_OFFSET_PT/72, 0, fig.dpi_scale_trans)
+            offset_0     = ScaledTranslation( EDGE_PCT_OFFSET_PT/72, 0, fig.dpi_scale_trans)   # push % rightwards at 0
+            offset_100   = ScaledTranslation(-EDGE_PCT_OFFSET_PT/72, 0, fig.dpi_scale_trans)   # pull % leftwards at 100
+
+            y_label = -0.075
+            # tiny tick marks + labels
+            for gx in ticks:
+                ax.plot([gx, gx], [-0.02, 0.0], transform=trans, color=(1, 1, 1, 0.6),
+                        lw=1.0, clip_on=False, zorder=4)
+                # center the number EXACTLY on the gridline
+                ax.text(gx, y_label, f"{int(gx)}", transform=trans,
+                        ha="center", va="top", fontsize=10, fontweight="700",
+                        color="#FFFFFF", zorder=4, clip_on=False)
+                # add '%' with custom offsets at the edges
+                if gx == 0:
+                    ax.text(gx, y_label, "%", transform=trans + offset_0,
+                            ha="left", va="top", fontsize=10, fontweight="700",
+                            color="#FFFFFF", zorder=4, clip_on=False)
+                elif gx == 100:
+                    ax.text(gx, y_label, "%", transform=trans + offset_100,
+                            ha="right", va="top", fontsize=10, fontweight="700",
+                            color="#FFFFFF", zorder=4, clip_on=False)
+                else:
+                    ax.text(gx, y_label, "%", transform=trans + offset_inner,
+                            ha="left", va="top", fontsize=10, fontweight="700",
+                            color="#FFFFFF", zorder=4, clip_on=False)
 
         # Section divider
         if draw_bottom_divider:
