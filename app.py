@@ -1412,8 +1412,8 @@ else:
 
             for gx in ticks:
                 # tiny tick mark
-                ax.plot([gx, gx], [-0.04, 0.0], transform=trans,
-                        color=(1, 1, 1, 0.6), lw=1.4, clip_on=False, zorder=4)
+                ax.plot([gx, gx], [-0.03, 0.0], transform=trans,
+                        color=(1, 1, 1, 0.6), lw=1.1, clip_on=False, zorder=4)
                 # number centered on gridline
                 ax.text(gx, y_label, f"{int(gx)}", transform=trans,
                         ha="center", va="top", fontsize=10, fontweight="700",
