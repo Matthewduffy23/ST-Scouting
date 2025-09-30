@@ -1234,10 +1234,11 @@ if isinstance(role_scores, dict) and role_scores:
 
 # ============================ END — WIDER PANELS, SMALLER CENTER GAP, EXTRA TOP-LEFT PADDING ============================
 
-# ============================ (F) THREE-PANEL PERCENTILE BOARD — Uniform rows + visible gridlines (manually centered ticks) ============================
+# ============================ (F) THREE-PANEL PERCENTILE BOARD — Uniform rows + visible gridlines (numbers centered; % offset) ============================
 from io import BytesIO
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.transforms import ScaledTranslation  # <-- for pixel offsets
 
 st.markdown("---")
 st.header("📋 Feature F — Percentile Board (uniform rows)")
@@ -1361,18 +1362,18 @@ else:
         ax.set_xlim(0, 100)
         ax.set_ylim(-0.5, n - 0.5)
 
-        # Hide default spines/ticks; we'll draw everything custom
+        # Hide default spines/ticks; draw custom
         for s in ax.spines.values():
             s.set_visible(False)
         ax.tick_params(axis="x", bottom=False, labelbottom=False, length=0)
 
-        # ---- Tracks (background) ----
+        # ---- Tracks ----
         for i in range(n):
             y = i
             ax.add_patch(plt.Rectangle((0, y - (BAR_FRAC/2)), 100, BAR_FRAC,
                                        color=TRACK, ec="none", zorder=0.5))
 
-        # ---- Vertical gridlines at each 10% (above tracks, below bars) ----
+        # ---- Vertical gridlines at each 10% ----
         for gx in ticks:
             ax.vlines(gx, -0.5, n - 0.5, colors=(1, 1, 1, 0.16), linewidth=0.8, zorder=0.75)
 
@@ -1382,11 +1383,10 @@ else:
             bar_w = max(0.0, min(100.0, float(pct)))
             ax.add_patch(plt.Rectangle((0, y - (BAR_FRAC/2)), bar_w, BAR_FRAC,
                                        color=pct_to_rgb(bar_w), ec="none", zorder=1.0))
-            # inside-left value (small, black)
             ax.text(1.0, y, val_str, ha="left", va="center",
                     fontsize=8, fontweight="400", color="#0B0B0B", zorder=2.0)
 
-        # ---- Professional dotted 50% line — top→bottom over bars ----
+        # ---- Dotted 50% reference line (over bars) ----
         ax.axvline(50, color="#FFFFFF", ls=(0, (4, 4)), lw=1.5, alpha=0.85, zorder=3.5)
 
         # Metric labels in left gutter
@@ -1395,15 +1395,23 @@ else:
             fig.text(left_margin, y_fig, lab, ha="left", va="center",
                      fontsize=10, fontweight="bold", color=LABEL)
 
-        # ---- Bottom axis (labels + tiny ticks) ONLY on last panel; drawn manually & centered ----
+        # ---- Manually centered bottom ticks ONLY on last panel ----
         if show_xticks:
-            trans = ax.get_xaxis_transform()  # x in data coords, y in axis [0..1]
+            trans = ax.get_xaxis_transform()               # x in data, y in axis coords
+            offset_px = ScaledTranslation(2/72, 0, fig.dpi_scale_trans)  # ~2px to the right for the '%'
+            y_label = -0.075
+            # tiny tick marks
             for gx in ticks:
-                # Tiny tick mark
-                ax.plot([gx, gx], [-0.02, 0.0], transform=trans, color=(1, 1, 1, 0.6), lw=1.0, clip_on=False, zorder=4)
-                # Centered label
-                ax.text(gx, -0.075, f"{int(gx)}%", transform=trans,
-                        ha="center", va="top", fontsize=10, fontweight="700", color="#FFFFFF", zorder=4)
+                ax.plot([gx, gx], [-0.02, 0.0], transform=trans, color=(1, 1, 1, 0.6),
+                        lw=1.0, clip_on=False, zorder=4)
+                # center the number EXACTLY on the gridline
+                ax.text(gx, y_label, f"{int(gx)}", transform=trans,
+                        ha="center", va="top", fontsize=10, fontweight="700",
+                        color="#FFFFFF", zorder=4)
+                # add '%' with a tiny pixel offset so digits stay visually centered
+                ax.text(gx, y_label, "%", transform=trans + offset_px,
+                        ha="left", va="top", fontsize=10, fontweight="700",
+                        color="#FFFFFF", zorder=4)
 
         # Section divider
         if draw_bottom_divider:
@@ -1432,6 +1440,7 @@ else:
                        file_name=f"{str(player_name).replace(' ','_')}_featureF.png",
                        mime="image/png")
 # ============================ END — Feature F ============================
+
 
 
 
