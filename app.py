@@ -1397,33 +1397,34 @@ else:
 
         # ---- Manually centered bottom ticks ONLY on last panel ----
         if show_xticks:
-            trans = ax.get_xaxis_transform()               # x in data, y in axis coords
+            trans = ax.get_xaxis_transform()  # x in data, y in axis coords
+
             # Adjustable offsets in points (pt) → convert to inches via /72
-            INNER_PCT_OFFSET_PT = 7    # keep your “just right” look
-            EDGE_PCT_OFFSET_PT  = 5     # separate knob for 0% and 100%
-            EDGE_PCT_OFFSET_100_PT = 11 # right edge (100%) → HIGHER = further right
-            
-            offset_inner = ScaledTranslation( INNER_PCT_OFFSET_PT/72, 0, fig.dpi_scale_trans)
-            offset_0     = ScaledTranslation( EDGE_PCT_OFFSET_PT/72, 0, fig.dpi_scale_trans)   # push % rightwards at 0
-            offset_100   = ScaledTranslation(-EDGE_PCT_OFFSET_PT/72, 0, fig.dpi_scale_trans)   # pull % leftwards at 100
+            INNER_PCT_OFFSET_PT    = 7   # offset for the "%" on inner ticks (keeps digits visually centered)
+            EDGE_PCT_OFFSET_0_PT   = 5   # offset for "%" at 0  (push right)
+            EDGE_PCT_OFFSET_100_PT = 9   # offset for "%" at 100 (push right)
+
+            offset_inner = ScaledTranslation(INNER_PCT_OFFSET_PT/72, 0, fig.dpi_scale_trans)
+            offset_pct_0 = ScaledTranslation(EDGE_PCT_OFFSET_0_PT/72, 0, fig.dpi_scale_trans)
+            offset_pct_100 = ScaledTranslation(EDGE_PCT_OFFSET_100_PT/72, 0, fig.dpi_scale_trans)
 
             y_label = -0.075
-            # tiny tick marks + labels
+
             for gx in ticks:
-                ax.plot([gx, gx], [-0.02, 0.0], transform=trans, color=(1, 1, 1, 0.6),
-                        lw=1.0, clip_on=False, zorder=4)
-                # center the number EXACTLY on the gridline
+                # tiny tick mark
+                ax.plot([gx, gx], [-0.02, 0.0], transform=trans,
+                        color=(1, 1, 1, 0.6), lw=1.0, clip_on=False, zorder=4)
+                # number centered on gridline
                 ax.text(gx, y_label, f"{int(gx)}", transform=trans,
                         ha="center", va="top", fontsize=9, fontweight="700",
                         color="#FFFFFF", zorder=4, clip_on=False)
-                # add '%' with custom offsets at the edges
+                # percent sign with custom offsets
                 if gx == 0:
-                    ax.text(gx, y_label, "%", transform=trans + offset_0,
+                    ax.text(gx, y_label, "%", transform=trans + offset_pct_0,
                             ha="left", va="top", fontsize=9, fontweight="700",
                             color="#FFFFFF", zorder=4, clip_on=False)
                 elif gx == 100:
-                    offset_100 = ScaledTranslation(EDGE_PCT_OFFSET_100_PT / 72, 5, fig.dpi_scale_trans),
-                    ax.text(gx, y_label, "%", transform=trans + offset_100,
+                    ax.text(gx, y_label, "%", transform=trans + offset_pct_100,
                             ha="left", va="top", fontsize=9, fontweight="700",
                             color="#FFFFFF", zorder=4, clip_on=False)
                 else:
