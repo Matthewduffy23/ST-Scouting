@@ -1401,7 +1401,7 @@ else:
             # Adjustable offsets in points (pt) → convert to inches via /72
             INNER_PCT_OFFSET_PT = 7    # keep your “just right” look
             EDGE_PCT_OFFSET_PT  = 5     # separate knob for 0% and 100%
-            EDGE_PCT_OFFSET_100_PT = 9 # right edge (100%) → HIGHER = further right
+            EDGE_PCT_OFFSET_100_PT = 11 # right edge (100%) → HIGHER = further right
             
             offset_inner = ScaledTranslation( INNER_PCT_OFFSET_PT/72, 0, fig.dpi_scale_trans)
             offset_0     = ScaledTranslation( EDGE_PCT_OFFSET_PT/72, 0, fig.dpi_scale_trans)   # push % rightwards at 0
@@ -1423,11 +1423,11 @@ else:
                             color="#FFFFFF", zorder=4, clip_on=False)
                 elif gx == 100:
                     ax.text(gx, y_label, "%", transform=trans + offset_100,
-                            ha="right", va="top", fontsize=10, fontweight="700",
+                            ha="right", va="top", fontsize=9, fontweight="700",
                             color="#FFFFFF", zorder=4, clip_on=False)
                 else:
                     ax.text(gx, y_label, "%", transform=trans + offset_inner,
-                            ha="left", va="top", fontsize=10, fontweight="700",
+                            ha="left", va="top", fontsize=9, fontweight="700",
                             color="#FFFFFF", zorder=4, clip_on=False)
 
         # Section divider
