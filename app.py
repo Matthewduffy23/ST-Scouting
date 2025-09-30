@@ -1414,7 +1414,7 @@ else:
                         lw=1.0, clip_on=False, zorder=4)
                 # center the number EXACTLY on the gridline
                 ax.text(gx, y_label, f"{int(gx)}", transform=trans,
-                        ha="center", va="top", fontsize=10, fontweight="700",
+                        ha="center", va="top", fontsize=9, fontweight="700",
                         color="#FFFFFF", zorder=4, clip_on=False)
                 # add '%' with custom offsets at the edges
                 if gx == 0:
