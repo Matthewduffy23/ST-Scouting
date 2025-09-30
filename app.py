@@ -1234,11 +1234,10 @@ if isinstance(role_scores, dict) and role_scores:
 
 # ============================ END — WIDER PANELS, SMALLER CENTER GAP, EXTRA TOP-LEFT PADDING ============================
 
-# ============================ (F) THREE-PANEL PERCENTILE BOARD — Uniform rows + visible gridlines (ticks centered) ============================
+# ============================ (F) THREE-PANEL PERCENTILE BOARD — Uniform rows + visible gridlines (manually centered ticks) ============================
 from io import BytesIO
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker  # << NEW: for perfect tick placement + % formatting
 
 st.markdown("---")
 st.header("📋 Feature F — Percentile Board (uniform rows)")
@@ -1338,7 +1337,7 @@ else:
     probe.remove()
     gutter = min(0.28, lab_w + 0.02)
 
-    ticks = np.arange(0, 101, 10)
+    ticks = np.arange(0, 101, 10)  # 0,10,...,100
 
     # visual center for footer text
     x_center_plot = (left_margin + gutter + (1 - right_margin)) / 2.0
@@ -1362,26 +1361,10 @@ else:
         ax.set_xlim(0, 100)
         ax.set_ylim(-0.5, n - 0.5)
 
-        # --- Ticks & labels (locator + formatter ensures labels are centered on gridlines) ---
+        # Hide default spines/ticks; we'll draw everything custom
         for s in ax.spines.values():
             s.set_visible(False)
-
-        ax.xaxis.set_major_locator(mticker.MultipleLocator(10))
-        ax.xaxis.set_major_formatter(mticker.PercentFormatter(xmax=100, decimals=0))
-
-        if show_xticks:
-            ax.tick_params(axis="x",
-                           bottom=True, labelbottom=True,
-                           length=3, width=1,  # tiny ticks
-                           direction="out", colors="#FFFFFF", pad=4)
-            # style labels
-            for t in ax.get_xticklabels():
-                t.set_horizontalalignment("center")
-                t.set_fontsize(10)
-                t.set_fontweight("700")
-                t.set_color("#FFFFFF")
-        else:
-            ax.tick_params(axis="x", bottom=True, labelbottom=False, length=0)
+        ax.tick_params(axis="x", bottom=False, labelbottom=False, length=0)
 
         # ---- Tracks (background) ----
         for i in range(n):
@@ -1389,9 +1372,9 @@ else:
             ax.add_patch(plt.Rectangle((0, y - (BAR_FRAC/2)), 100, BAR_FRAC,
                                        color=TRACK, ec="none", zorder=0.5))
 
-        # ---- Vertical gridlines at each major tick (10%) ----
-        for gx in ax.get_xticks():
-            ax.axvline(gx, color=(1, 1, 1, 0.16), linewidth=0.8, zorder=0.75)
+        # ---- Vertical gridlines at each 10% (above tracks, below bars) ----
+        for gx in ticks:
+            ax.vlines(gx, -0.5, n - 0.5, colors=(1, 1, 1, 0.16), linewidth=0.8, zorder=0.75)
 
         # ---- Bars + value labels ----
         for i, (lab, pct, val_str) in enumerate(tuples[::-1]):  # reverse for top-first
@@ -1411,6 +1394,16 @@ else:
             y_fig = (panel_top - header_h - n*row_slot) + ((i + 0.5) * row_slot)
             fig.text(left_margin, y_fig, lab, ha="left", va="center",
                      fontsize=10, fontweight="bold", color=LABEL)
+
+        # ---- Bottom axis (labels + tiny ticks) ONLY on last panel; drawn manually & centered ----
+        if show_xticks:
+            trans = ax.get_xaxis_transform()  # x in data coords, y in axis [0..1]
+            for gx in ticks:
+                # Tiny tick mark
+                ax.plot([gx, gx], [-0.02, 0.0], transform=trans, color=(1, 1, 1, 0.6), lw=1.0, clip_on=False, zorder=4)
+                # Centered label
+                ax.text(gx, -0.075, f"{int(gx)}%", transform=trans,
+                        ha="center", va="top", fontsize=10, fontweight="700", color="#FFFFFF", zorder=4)
 
         # Section divider
         if draw_bottom_divider:
@@ -1439,6 +1432,7 @@ else:
                        file_name=f"{str(player_name).replace(' ','_')}_featureF.png",
                        mime="image/png")
 # ============================ END — Feature F ============================
+
 
 
 
