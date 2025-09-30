@@ -1261,7 +1261,7 @@ else:
         ("Progressive Runs", "Progressive runs per 90"),
         ("Shots", "Shots per 90"),
         ("Shooting Accuracy %", "Shots on target, %"),
-        ("Successful Att. Actions", "Touches in box per 90"),
+        ("Successful Att. Actions", "Successful attacking actions per 90"),
         ("Touches in Opposition Box", "Touches in box per 90"),
     ]:
         ATTACKING.append((lab, float(np.nan_to_num(pct_of(met), nan=0.0)), val_of(met)[1]))
