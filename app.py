@@ -1784,7 +1784,7 @@ else:
 
 
 
-# ============================== SCATTERPLOT — 1920×820, 100px top gap, non-overlap labels (default ON) ==============================
+# ============================== SCATTERPLOT — exact canvas + top gap + smart labels ==============================
 st.markdown("---")
 st.header("📈 Scatterplot")
 
@@ -1798,7 +1798,7 @@ with st.expander("Scatter settings", expanded=False):
     y_metric = st.selectbox("Y-axis", [c for c in FEATURES if c in numeric_cols],
                             index=(FEATURES.index(y_default) if y_default in FEATURES else 1), key="sc_y")
 
-    # League pool
+    # Pool controls
     leagues_available_sc = sorted(df["League"].dropna().unique().tolist())
     player_league = player_row.iloc[0]["League"] if not player_row.empty else None
     preset_sc = st.selectbox("League preset",
@@ -1815,7 +1815,6 @@ with st.expander("Scatter settings", expanded=False):
     leagues_scatter = sorted(preset_map_sc.get(preset_sc, set()) | set(add_leagues_sc))
     if not leagues_scatter and player_league:
         leagues_scatter = [player_league]
-
     same_pos_scatter = st.checkbox("Limit pool to current position prefix", value=True, key="sc_pos")
 
     # Filters
@@ -1827,21 +1826,19 @@ with st.expander("Scatter settings", expanded=False):
     min_age_s, max_age_s = st.slider("Age filter", age_min_bound, age_max_bound, (16, 40), key="sc_age")
     min_strength_s, max_strength_s = st.slider("League quality (strength)", 0, 101, (0, 101), key="sc_ls")
 
-    # Selected player controls
+    # Selected player & labels
     include_selected = st.toggle("Include selected player", value=True, key="sc_include")
-
-    # Labels (default ON)
-    show_labels   = st.toggle("Show player labels", value=True, key="sc_labels_all")
+    show_labels   = st.toggle("Show player labels", value=True, key="sc_labels_all")  # default ON
     allow_overlap = st.toggle("Allow overlapping labels (not recommended)", value=False, key="sc_overlap")
-    label_size    = st.slider("Label size", 8, 16, 11, 1, key="sc_lbl_sz")  # default 11
+    label_size    = st.slider("Label size", 8, 16, 11, 1, key="sc_lbl_sz")
 
-    # Visuals
+    # Visual aids
     show_medians  = st.checkbox("Show median reference lines", value=True, key="sc_medians")
     shade_iqr     = st.checkbox("Shade interquartile range (25–75%)", value=True, key="sc_iqr")
 
     # Points
     point_alpha   = st.slider("Point opacity", 0.2, 1.0, 0.92, 0.02, key="sc_alpha")
-    point_size    = st.slider("Point size", 24, 220, 150, 2, key="sc_pts")     # default 150
+    point_size    = st.slider("Point size", 24, 220, 150, 2, key="sc_pts")
     marker        = st.selectbox("Marker", ["o", "s", "^", "D"], index=0, key="sc_marker")
 
     # Ticks (major only)
@@ -1854,12 +1851,11 @@ with st.expander("Scatter settings", expanded=False):
     GRID_MAJ = "#d7d7d7" if theme == "Light" else "#3a4050"
     txt_col  = "#111111" if theme == "Light" else "#f5f5f5"
 
-    # Colour-by metric + palettes
+    # Colour mapping
     colour_metric = st.selectbox("Colour dots by metric (scaled within pool)",
         [c for c in FEATURES if c in numeric_cols],
         index=(FEATURES.index(x_default) if x_default in FEATURES else 0),
         key="sc_colour_metric")
-
     palette_choice = st.selectbox(
         "Palette",
         [
@@ -1874,7 +1870,15 @@ with st.expander("Scatter settings", expanded=False):
     )
     reverse_scale  = st.checkbox("Reverse colours", value=False, key="sc_reverse")
 
-# ---- Build pool & plot ----
+    # === Canvas & top gap ===
+    canvas_preset = st.selectbox("Canvas size (px)", ["1280×720", "1600×900", "1920×820", "1920×1080"], index=2)
+    w_px, h_px = map(int, canvas_preset.replace("×", "x").replace(" ", "").split("x"))
+    top_gap_px = st.slider("Top blank gap (px)", 0, 200, 100, 5)
+
+    # Exact-pixel render (prevents Streamlit stretching)
+    render_exact = st.checkbox("Render exact pixels (PNG)", value=True, help="Ensures the displayed image matches the chosen pixel size exactly.")
+
+# ---- Build pool ----
 try:
     pool_sc = df[df["League"].isin(leagues_scatter)].copy()
     if same_pos_scatter and not player_row.empty:
@@ -1907,7 +1911,6 @@ try:
         import matplotlib as mpl, numpy as np, pandas as pd
         import matplotlib.pyplot as plt
         from matplotlib import patheffects as pe
-        from matplotlib.ticker import MultipleLocator, FormatStrFormatter
         try:
             from adjustText import adjust_text
             _HAS_ADJUST = True
@@ -1918,7 +1921,7 @@ try:
             st.info("No players in scatter pool after filters.")
         else:
             mpl.rcParams.update({
-                "figure.dpi": 100,          # 19.2" × 8.2" -> 1920×820
+                "figure.dpi": 100,
                 "savefig.dpi": 220,
                 "font.size": 12,
                 "axes.labelsize": 12,
@@ -1929,8 +1932,8 @@ try:
                 "text.antialiased": True,
             })
 
-            # EXACT 1920×820 figure
-            fig, ax = plt.subplots(figsize=(19.2, 8.2), dpi=100)
+            # === Figure with exact pixels ===
+            fig, ax = plt.subplots(figsize=(w_px/100, h_px/100), dpi=100)
             fig.patch.set_facecolor(PAGE_BG)
             ax.set_facecolor(PLOT_BG)
 
@@ -1947,7 +1950,7 @@ try:
             xlim = padded_limits(x_vals); ylim = padded_limits(y_vals)
             ax.set_xlim(*xlim); ax.set_ylim(*ylim)
 
-            # ---- Colour mapping (Series aligned to index) ----
+            # ---- Colour mapping ----
             cvals = pool_sc[colour_metric].to_numpy(float)
             cmin, cmax = float(np.nanmin(cvals)), float(np.nanmax(cvals))
             if cmin == cmax: cmax = cmin + 1e-6
@@ -1970,18 +1973,17 @@ try:
                 def map_col(v): return interp([191,210,255], [10,42,102], v)
             elif palette_choice == "Light-Green → Dark-Green":
                 def map_col(v): return interp([196,235,203], [12,92,48], v)
-            else:  # "Purple ↔ Gold (diverging)"
+            else:  # Purple ↔ Gold
                 def map_col(v):
-                    purple, gold = [96,55,140], [240,197,106]
-                    mid = [180,150,210]
+                    purple, mid, gold = [96,55,140], [180,150,210], [240,197,106]
                     return interp(purple, mid, v/0.5) if v <= 0.5 else interp(mid, gold, (v-0.5)/0.5)
 
             col_array = np.vstack([map_col(v) for v in t])
             color_series = pd.Series(list(map(tuple, col_array)), index=pool_sc.index)
 
             # Split selected
-            sel_name = selected_player_name if include_selected else None
-            if sel_name is not None:
+            sel_name = player_row.iloc[0]["Player"] if (include_selected and not player_row.empty) else None
+            if sel_name:
                 others = pool_sc[pool_sc["Player"] != sel_name]
                 sel    = pool_sc[pool_sc["Player"] == sel_name]
             else:
@@ -1989,15 +1991,12 @@ try:
                 sel    = pool_sc.iloc[0:0]
 
             # ---------- Points ----------
-            # Others: solid fill, no ring
             ax.scatter(
                 others[x_metric], others[y_metric],
                 s=point_size, c=list(color_series.loc[others.index]),
-                alpha=float(point_alpha),
-                edgecolors="none", linewidths=0.0,
+                alpha=float(point_alpha), edgecolors="none", linewidths=0.0,
                 marker=marker, zorder=2
             )
-            # Selected: same size, red with white ring
             if not sel.empty:
                 ax.scatter(
                     sel[x_metric], sel[y_metric],
@@ -2016,15 +2015,14 @@ try:
             if show_medians:
                 med_x = float(np.nanmedian(x_vals)); med_y = float(np.nanmedian(y_vals))
                 med_col = "#000000" if theme == "Light" else "#ffffff"
-                ax.axvline(med_x, color=med_col, ls=(0,(4,4)), lw=2.2, zorder=3)  # semibold
+                ax.axvline(med_x, color=med_col, ls=(0,(4,4)), lw=2.2, zorder=3)
                 ax.axhline(med_y, color=med_col, ls=(0,(4,4)), lw=2.2, zorder=3)
 
             # ---------- Labels ----------
-            # Always label selected. Others labeled only if show_labels.
-            from itertools import chain
+            from matplotlib import patheffects as pe
             texts = []
             if not sel.empty:
-                sx = float(sel.iloc[0][x_metric]); sy = float(sel.iloc[0][y_metric])
+                sx, sy = float(sel.iloc[0][x_metric]), float(sel.iloc[0][y_metric])
                 tsel = ax.annotate(
                     sel.iloc[0]["Player"], (sx, sy),
                     xytext=(10, 12), textcoords="offset points",
@@ -2046,14 +2044,13 @@ try:
                 y_tol = (ylim[1]-ylim[0]) * 0.035
                 placed = []
                 if not sel.empty:
-                    placed.append((float(sel.iloc[0][x_metric]), float(sel.iloc[0][y_metric])))
+                    placed.append((sx, sy))
 
                 for _, r in candidates.iterrows():
                     px, py = float(r[x_metric]), float(r[y_metric])
-                    if not allow_overlap:
-                        if any(abs(px-qx) < x_tol and abs(py-qy) < y_tol for (qx,qy) in placed):
-                            continue
-                        placed.append((px, py))
+                    if not allow_overlap and any(abs(px-qx) < x_tol and abs(py-qy) < y_tol for (qx,qy) in placed):
+                        continue
+                    placed.append((px, py))
                     t = ax.annotate(
                         r["Player"], (px, py),
                         xytext=(10, 12), textcoords="offset points",
@@ -2065,18 +2062,19 @@ try:
                                                       alpha=0.9)])
                     texts.append(t)
 
-                if _HAS_ADJUST and not allow_overlap and texts:
-                    adjust_text(texts, ax=ax, only_move={"points":"y", "text":"xy"},
-                                autoalign=True, precision=0.001, lim=150,
-                                expand_text=(1.05, 1.10), expand_points=(1.05, 1.10),
-                                force_text=(0.08, 0.12), force_points=(0.08, 0.12),
-                                arrowprops=None)
+                try:
+                    if _HAS_ADJUST and not allow_overlap and texts:
+                        adjust_text(texts, ax=ax, only_move={"points":"y", "text":"xy"},
+                                    autoalign=True, precision=0.001, lim=150,
+                                    expand_text=(1.05, 1.10), expand_points=(1.05, 1.10),
+                                    force_text=(0.08, 0.12), force_points=(0.08, 0.12))
+                except Exception:
+                    pass
 
             # ---------- Axes & grid ----------
             ax.set_xlabel(x_metric, fontweight="bold", color=txt_col)
             ax.set_ylabel(y_metric, fontweight="bold", color=txt_col)
 
-            # Major ticks only, semibold 0.1-style labels
             step = float(tick_step)
             ax.xaxis.set_major_locator(MultipleLocator(base=step))
             ax.yaxis.set_major_locator(MultipleLocator(base=step))
@@ -2087,20 +2085,28 @@ try:
                 tick.set_fontweight('semibold'); tick.set_color(txt_col)
 
             ax.grid(True, which="major", linewidth=0.9, color=GRID_MAJ)
-
             for s in ax.spines.values():
                 s.set_linewidth(0.9)
                 s.set_color("#9ca3af" if theme=="Light" else "#6b7280")
 
-            # ===== Fixed TOP GAP of 100 px while preserving 1920×820 =====
-            TOP_GAP_PX = 100.0
-            TOP_FRAC = 1.0 - (TOP_GAP_PX / 820.0)  # = 0.878048...
-            fig.subplots_adjust(left=0.075, right=0.985, bottom=0.105, top=TOP_FRAC)
+            # ===== fixed top gap =====
+            top_frac = 1.0 - (top_gap_px / float(h_px))
+            fig.subplots_adjust(left=0.075, right=0.985, bottom=0.105, top=top_frac)
 
-            st.pyplot(fig, use_container_width=False)
+            if render_exact:
+                # Render to PNG at the exact size, then display at that pixel width.
+                from io import BytesIO
+                buf = BytesIO()
+                fig.savefig(buf, format="png", dpi=100, facecolor=fig.get_facecolor(), bbox_inches="tight")
+                buf.seek(0)
+                st.image(buf, width=w_px)  # exact width in pixels
+            else:
+                st.pyplot(fig, use_container_width=False)
+
 except Exception as e:
     st.info(f"Scatter could not be drawn: {e}")
 # ==========================================================================================================
+
 
 
 
