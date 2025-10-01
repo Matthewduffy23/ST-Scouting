@@ -1784,7 +1784,7 @@ else:
 
 
 
-# ============================== SCATTERPLOT (final tidy) ==============================
+# ============================== SCATTERPLOT (Tableau-style labels, include toggle) ==============================
 st.markdown("---")
 st.header("📈 Scatterplot")
 
@@ -1826,10 +1826,13 @@ with st.expander("Scatter settings", expanded=False):
     min_age_s, max_age_s = st.slider("Age filter", age_min_bound, age_max_bound, (16, 40), key="sc_age")
     min_strength_s, max_strength_s = st.slider("League quality (strength)", 0, 101, (0, 101), key="sc_ls")
 
+    # Include selected toggle (back)
+    include_selected = st.toggle("Include selected player", value=True, key="sc_include")
+
     # Labels (Tableau style: off by default)
     show_labels   = st.toggle("Show player labels", value=False, key="sc_labels_all")
-    allow_overlap = st.toggle("Allow overlapping labels", value=False, key="sc_overlap")  # default NO
-    label_size    = 11  # modest; not huge; semibold below
+    allow_overlap = st.toggle("Allow overlapping labels (not recommended)", value=False, key="sc_overlap")  # default NO
+    label_size    = st.slider("Label size", 8, 16, 11, 1, key="sc_lbl_sz")  # modest; semibold below
 
     # Visuals
     show_medians = st.checkbox("Show median reference lines", value=True, key="sc_medians")
@@ -1837,7 +1840,7 @@ with st.expander("Scatter settings", expanded=False):
 
     # Points (bigger & darker)
     point_alpha = st.slider("Point opacity", 0.2, 1.0, 0.92, 0.02, key="sc_alpha")
-    point_size  = st.slider("Point size", 24, 200, 72, 2, key="sc_pts")
+    point_size  = st.slider("Point size", 24, 220, 84, 2, key="sc_pts")  # bigger default
     marker      = st.selectbox("Marker", ["o", "s", "^", "D"], index=0, key="sc_marker")
 
     # Theme
@@ -1878,9 +1881,11 @@ try:
             pool_sc[m] = pd.to_numeric(pool_sc[m], errors="coerce")
         pool_sc = pool_sc.dropna(subset=[x_metric, y_metric, colour_metric, "Player", "Team", "League"])
 
-        # Ensure selected player included (ring + label when labels are on)
+        # Selected player handling (include or exclude)
         selected_player_name = player_row.iloc[0]["Player"] if not player_row.empty else None
-        if selected_player_name is not None and not (pool_sc["Player"] == selected_player_name).any():
+        if not include_selected and selected_player_name is not None:
+            pool_sc = pool_sc[pool_sc["Player"] != selected_player_name]
+        elif include_selected and selected_player_name is not None and not (pool_sc["Player"] == selected_player_name).any():
             ins = df[df["Player"] == selected_player_name].head(1).copy()
             for m in [x_metric, y_metric, colour_metric]:
                 ins[m] = pd.to_numeric(ins[m], errors="coerce")
@@ -1946,7 +1951,7 @@ try:
                     return (a + (b-a)*np.clip(u,0,1))/255.0
                 colors = np.array([ramp_rg(v) for v in t])
             else:
-                # Light grey -> near black (NOT pure black)
+                # Light grey -> near black
                 def ramp_bw(v):
                     lo = np.array([210, 214, 220], dtype=float)  # light grey
                     hi = np.array([20,  23,  31], dtype=float)   # near black
@@ -1954,36 +1959,33 @@ try:
                 colors = np.array([ramp_bw(v) for v in t])
 
             # Split selected
-            sel_name = selected_player_name
-            others = pool_sc[pool_sc["Player"] != sel_name] if sel_name is not None else pool_sc
+            sel_name = selected_player_name if include_selected else None
+            if sel_name is not None:
+                others = pool_sc[pool_sc["Player"] != sel_name]
+                sel    = pool_sc[pool_sc["Player"] == sel_name]
+            else:
+                others = pool_sc
+                sel    = pool_sc.iloc[0:0]
 
-            # Points (bigger & darker, white stroke)
+            # Points
             ax.scatter(
                 others[x_metric], others[y_metric],
                 s=point_size, c=colors[others.index] if len(colors)==len(pool_sc) else "#111827",
-                alpha=float(point_alpha), linewidths=0.8, edgecolors="white", marker=marker, zorder=2
+                alpha=float(point_alpha), linewidths=0.9, edgecolors="white", marker=marker, zorder=2
             )
 
-            texts = []
-            # Selected ring (kept even if labels off)
-            if sel_name is not None:
-                sel = pool_sc[pool_sc["Player"] == sel_name]
-                if not sel.empty:
-                    ax.scatter(
-                        sel[x_metric], sel[y_metric],
-                        s=max(point_size*2, 120), facecolors="none", edgecolors="#22d3ee",
-                        linewidths=2.2, marker=marker, zorder=5
-                    )
-                    # Label only if toggled on
-                    if st.session_state.get("sc_labels_all", False):
-                        for _, r in sel.iterrows():
-                            tsel = ax.text(
-                                float(r[x_metric]), float(r[y_metric]),
-                                r["Player"], fontsize=label_size, fontweight="semibold",
-                                color=txt_col, ha="left", va="bottom", zorder=6
-                            )
-                            tsel.set_path_effects([pe.withStroke(linewidth=2.6, foreground="white", alpha=0.95)])
-                            texts.append(tsel)
+            # Selected → red fill + white stroke + cyan ring
+            if not sel.empty:
+                ax.scatter(
+                    sel[x_metric], sel[y_metric],
+                    s=max(point_size*1.25, 100), c="#C81E1E", edgecolors="white",
+                    linewidths=1.2, marker=marker, zorder=4
+                )
+                ax.scatter(
+                    sel[x_metric], sel[y_metric],
+                    s=max(point_size*1.9, 140), facecolors="none", edgecolors="#22d3ee",
+                    linewidths=2.0, marker=marker, zorder=5
+                )
 
             # IQR shading / medians
             if shade_iqr:
@@ -1996,43 +1998,63 @@ try:
                 ax.axvline(med_x, color="#6b7280", ls=(0,(5,4)), lw=1.15, zorder=3)
                 ax.axhline(med_y, color="#6b7280", ls=(0,(5,4)), lw=1.15, zorder=3)
 
-            # Labels (OFF by default; non-overlapping)
+            # ----------------- Tableau-style NO-OVERLAP labelling -----------------
             if show_labels:
-                for _, r in others.iterrows():
-                    tt = ax.text(
-                        float(r[x_metric]), float(r[y_metric]),
-                        r["Player"], fontsize=label_size, fontweight="semibold",
-                        color=txt_col, ha="left", va="bottom", zorder=4
-                    )
-                    tt.set_path_effects([pe.withStroke(linewidth=2.4, foreground="white", alpha=0.95)])
-                    texts.append(tt)
+                # Greedy selection: keep as many labels as possible with spacing, then (optionally) adjust
+                candidates = others.copy()
 
-                if not allow_overlap:
+                # Sort by visual priority: farther from center first (spreads labels nicely)
+                cx, cy = float(np.nanmedian(x_vals)), float(np.nanmedian(y_vals))
+                dist = (candidates[x_metric]-cx)**2 + (candidates[y_metric]-cy)**2
+                candidates = candidates.assign(_prio=-dist.values).sort_values("_prio")
+
+                x_tol = (xlim[1]-xlim[0]) * 0.035   # ~3.5% of x-range
+                y_tol = (ylim[1]-ylim[0]) * 0.035   # ~3.5% of y-range
+                placed = []
+
+                texts = []
+                # Always try to place the selected player's label first (if present)
+                if not sel.empty:
+                    sx = float(sel.iloc[0][x_metric]); sy = float(sel.iloc[0][y_metric])
+                    tsel = ax.annotate(
+                        sel.iloc[0]["Player"], (sx, sy),
+                        xytext=(8, 10), textcoords="offset points",
+                        fontsize=label_size, fontweight="semibold", color=txt_col,
+                        ha="left", va="bottom", zorder=6
+                    )
+                    tsel.set_path_effects([pe.withStroke(linewidth=2.6, foreground="white", alpha=0.95)])
+                    texts.append(tsel)
+                    placed.append((sx, sy))
+
+                # Place as many as possible without collisions; skip the rest
+                for _, r in candidates.iterrows():
+                    px, py = float(r[x_metric]), float(r[y_metric])
+                    if any(abs(px-qx) < x_tol and abs(py-qy) < y_tol for (qx,qy) in placed):
+                        continue  # too close → drop label
+                    t = ax.annotate(
+                        r["Player"], (px, py),
+                        xytext=(8, 10), textcoords="offset points",   # offset so label never touches dot
+                        fontsize=label_size, fontweight="semibold", color=txt_col,
+                        ha="left", va="bottom", zorder=4
+                    )
+                    t.set_path_effects([pe.withStroke(linewidth=2.4, foreground="white", alpha=0.95)])
+                    texts.append(t)
+                    placed.append((px, py))
+
+                # Extra polish (tiny repulsion) if allowed to move labels (still no overlaps)
+                if not allow_overlap and texts:
                     if _HAS_ADJUST:
                         adjust_text(
                             texts, ax=ax,
                             only_move={"points":"y", "text":"xy"},
-                            autoalign=True, precision=0.001, lim=300,
-                            expand_text=(1.15, 1.20), expand_points=(1.10, 1.20),
-                            force_text=(0.15, 0.20), force_points=(0.15, 0.20),
-                            arrowprops=dict(arrowstyle="-", lw=0.6, color="#94a3b8", alpha=0.7)
+                            autoalign=True, precision=0.001, lim=150,
+                            expand_text=(1.05, 1.10), expand_points=(1.05, 1.10),
+                            force_text=(0.08, 0.12), force_points=(0.08, 0.12),
+                            arrowprops=None
                         )
-                    else:
-                        # simple iterative vertical nudge
-                        used = []
-                        xrad = (xlim[1]-xlim[0]) * 0.012
-                        yrad = (ylim[1]-ylim[0]) * 0.012
-                        for _ in range(3):
-                            moved = False; new_used = []
-                            for t in texts:
-                                x, y = t.get_position()
-                                while any(abs(x-ux) < xrad and abs(y-uy) < yrad for ux,uy in used):
-                                    y += yrad * 0.9; moved = True
-                                t.set_position((x, y)); new_used.append((x, y))
-                            used = new_used
-                            if not moved: break
+                    # If adjustText isn't installed, the greedy placer already ensured no overlaps.
 
-            # Axes & grid — no title, no info banner
+            # Axes & grid — no title/info bar
             ax.set_xlabel(x_metric, fontweight="bold", color=txt_col)
             ax.set_ylabel(y_metric, fontweight="bold", color=txt_col)
             ax.tick_params(colors=txt_col)
@@ -2042,12 +2064,12 @@ try:
             for s in ax.spines.values():
                 s.set_linewidth(0.9); s.set_color("#9ca3af" if theme=="Light" else "#6b7280")
 
-            # No title / no right color scale
             plt.tight_layout(rect=[0.04, 0.04, 0.98, 0.98])
             st.pyplot(fig, use_container_width=False)
 except Exception as e:
     st.info(f"Scatter could not be drawn: {e}")
 # ======================================================================
+
 
 
 
