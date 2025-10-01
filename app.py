@@ -1784,7 +1784,7 @@ else:
 
 
 
-# ============================== SCATTERPLOT (1280x720 + top gap + extra palettes) ==============================
+# ============================== SCATTERPLOT — 1920×820, 100px top gap, non-overlap labels (default ON) ==============================
 st.markdown("---")
 st.header("📈 Scatterplot")
 
@@ -1798,6 +1798,7 @@ with st.expander("Scatter settings", expanded=False):
     y_metric = st.selectbox("Y-axis", [c for c in FEATURES if c in numeric_cols],
                             index=(FEATURES.index(y_default) if y_default in FEATURES else 1), key="sc_y")
 
+    # League pool
     leagues_available_sc = sorted(df["League"].dropna().unique().tolist())
     player_league = player_row.iloc[0]["League"] if not player_row.empty else None
     preset_sc = st.selectbox("League preset",
@@ -1826,10 +1827,11 @@ with st.expander("Scatter settings", expanded=False):
     min_age_s, max_age_s = st.slider("Age filter", age_min_bound, age_max_bound, (16, 40), key="sc_age")
     min_strength_s, max_strength_s = st.slider("League quality (strength)", 0, 101, (0, 101), key="sc_ls")
 
+    # Selected player controls
     include_selected = st.toggle("Include selected player", value=True, key="sc_include")
 
-    # Labels
-    show_labels   = st.toggle("Show player labels", value=False, key="sc_labels_all")
+    # Labels (default ON)
+    show_labels   = st.toggle("Show player labels", value=True, key="sc_labels_all")
     allow_overlap = st.toggle("Allow overlapping labels (not recommended)", value=False, key="sc_overlap")
     label_size    = st.slider("Label size", 8, 16, 11, 1, key="sc_lbl_sz")  # default 11
 
@@ -1905,6 +1907,7 @@ try:
         import matplotlib as mpl, numpy as np, pandas as pd
         import matplotlib.pyplot as plt
         from matplotlib import patheffects as pe
+        from matplotlib.ticker import MultipleLocator, FormatStrFormatter
         try:
             from adjustText import adjust_text
             _HAS_ADJUST = True
@@ -1915,7 +1918,7 @@ try:
             st.info("No players in scatter pool after filters.")
         else:
             mpl.rcParams.update({
-                "figure.dpi": 100,          # 12.8" × 7.2" -> 1280×720
+                "figure.dpi": 100,          # 19.2" × 8.2" -> 1920×820
                 "savefig.dpi": 220,
                 "font.size": 12,
                 "axes.labelsize": 12,
@@ -1926,8 +1929,8 @@ try:
                 "text.antialiased": True,
             })
 
-            # EXACT 1280×720 figure
-            fig, ax = plt.subplots(figsize=(12.8, 7.2), dpi=100)
+            # EXACT 1920×820 figure
+            fig, ax = plt.subplots(figsize=(19.2, 8.2), dpi=100)
             fig.patch.set_facecolor(PAGE_BG)
             ax.set_facecolor(PLOT_BG)
 
@@ -1999,7 +2002,7 @@ try:
                 ax.scatter(
                     sel[x_metric], sel[y_metric],
                     s=point_size, c="#C81E1E",
-                    edgecolors="white", linewidths=1.6,
+                    edgecolors="white", linewidths=1.8,
                     marker=marker, zorder=4
                 )
 
@@ -2013,10 +2016,26 @@ try:
             if show_medians:
                 med_x = float(np.nanmedian(x_vals)); med_y = float(np.nanmedian(y_vals))
                 med_col = "#000000" if theme == "Light" else "#ffffff"
-                ax.axvline(med_x, color=med_col, ls=(0,(4,4)), lw=2.0, zorder=3)  # semibold
-                ax.axhline(med_y, color=med_col, ls=(0,(4,4)), lw=2.0, zorder=3)
+                ax.axvline(med_x, color=med_col, ls=(0,(4,4)), lw=2.2, zorder=3)  # semibold
+                ax.axhline(med_y, color=med_col, ls=(0,(4,4)), lw=2.2, zorder=3)
 
-            # Labels (optional, non-overlap attempt)
+            # ---------- Labels ----------
+            # Always label selected. Others labeled only if show_labels.
+            from itertools import chain
+            texts = []
+            if not sel.empty:
+                sx = float(sel.iloc[0][x_metric]); sy = float(sel.iloc[0][y_metric])
+                tsel = ax.annotate(
+                    sel.iloc[0]["Player"], (sx, sy),
+                    xytext=(10, 12), textcoords="offset points",
+                    fontsize=label_size, fontweight="semibold", color=txt_col,
+                    ha="left", va="bottom", zorder=6
+                )
+                tsel.set_path_effects([pe.withStroke(linewidth=2.0,
+                                                     foreground=("#ffffff" if theme=="Light" else "#1e293b"),
+                                                     alpha=0.9)])
+                texts.append(tsel)
+
             if show_labels:
                 candidates = others.copy()
                 cx, cy = float(np.nanmedian(x_vals)), float(np.nanmedian(y_vals))
@@ -2025,25 +2044,16 @@ try:
 
                 x_tol = (xlim[1]-xlim[0]) * 0.035
                 y_tol = (ylim[1]-ylim[0]) * 0.035
-                placed, texts = [], []
-
+                placed = []
                 if not sel.empty:
-                    sx = float(sel.iloc[0][x_metric]); sy = float(sel.iloc[0][y_metric])
-                    tsel = ax.annotate(
-                        sel.iloc[0]["Player"], (sx, sy),
-                        xytext=(10, 12), textcoords="offset points",
-                        fontsize=label_size, fontweight="semibold", color=txt_col,
-                        ha="left", va="bottom", zorder=6
-                    )
-                    tsel.set_path_effects([pe.withStroke(linewidth=2.0,
-                                                         foreground=("#ffffff" if theme=="Light" else "#1e293b"),
-                                                         alpha=0.9)])
-                    texts.append(tsel); placed.append((sx, sy))
+                    placed.append((float(sel.iloc[0][x_metric]), float(sel.iloc[0][y_metric])))
 
                 for _, r in candidates.iterrows():
                     px, py = float(r[x_metric]), float(r[y_metric])
-                    if any(abs(px-qx) < x_tol and abs(py-qy) < y_tol for (qx,qy) in placed):
-                        continue
+                    if not allow_overlap:
+                        if any(abs(px-qx) < x_tol and abs(py-qy) < y_tol for (qx,qy) in placed):
+                            continue
+                        placed.append((px, py))
                     t = ax.annotate(
                         r["Player"], (px, py),
                         xytext=(10, 12), textcoords="offset points",
@@ -2053,9 +2063,9 @@ try:
                     t.set_path_effects([pe.withStroke(linewidth=2.0,
                                                       foreground=("#ffffff" if theme=="Light" else "#1e293b"),
                                                       alpha=0.9)])
-                    texts.append(t); placed.append((px, py))
+                    texts.append(t)
 
-                if not allow_overlap and texts and _HAS_ADJUST:
+                if _HAS_ADJUST and not allow_overlap and texts:
                     adjust_text(texts, ax=ax, only_move={"points":"y", "text":"xy"},
                                 autoalign=True, precision=0.001, lim=150,
                                 expand_text=(1.05, 1.10), expand_points=(1.05, 1.10),
@@ -2066,7 +2076,7 @@ try:
             ax.set_xlabel(x_metric, fontweight="bold", color=txt_col)
             ax.set_ylabel(y_metric, fontweight="bold", color=txt_col)
 
-            # Major ticks only, formatted like 0.1, 0.2… & semibold
+            # Major ticks only, semibold 0.1-style labels
             step = float(tick_step)
             ax.xaxis.set_major_locator(MultipleLocator(base=step))
             ax.yaxis.set_major_locator(MultipleLocator(base=step))
@@ -2082,9 +2092,10 @@ try:
                 s.set_linewidth(0.9)
                 s.set_color("#9ca3af" if theme=="Light" else "#6b7280")
 
-            # ===== Fixed TOP GAP while preserving 1280×720 =====
-            # Don't call tight_layout (it removes the gap). Use subplots_adjust:
-            fig.subplots_adjust(left=0.08, right=0.98, bottom=0.10, top=0.80)  # top=0.80 => clear headroom
+            # ===== Fixed TOP GAP of 100 px while preserving 1920×820 =====
+            TOP_GAP_PX = 100.0
+            TOP_FRAC = 1.0 - (TOP_GAP_PX / 820.0)  # = 0.878048...
+            fig.subplots_adjust(left=0.075, right=0.985, bottom=0.105, top=TOP_FRAC)
 
             st.pyplot(fig, use_container_width=False)
 except Exception as e:
