@@ -2136,7 +2136,7 @@ try:
                 y_gap_center = top_frac + (1 - top_frac) * 0.5
                 fig.text(0.5, y_gap_center, custom_title.strip(),
                          ha="center", va="center", color=title_col,
-                         fontsize=16, fontweight="semibold")
+                         fontsize=22, fontweight="semibold")
 
             if render_exact:
                 from io import BytesIO
