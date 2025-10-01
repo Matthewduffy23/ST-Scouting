@@ -1784,9 +1784,11 @@ else:
 
 
 
-# ============================== SCATTERPLOT (FINAL — your spec) ==============================
+# ============================== SCATTERPLOT (1280x720 + top gap + semibold ticks) ==============================
 st.markdown("---")
 st.header("📈 Scatterplot")
+
+from matplotlib.ticker import MultipleLocator, FormatStrFormatter
 
 with st.expander("Scatter settings", expanded=False):
     numeric_cols = df.select_dtypes(include="number").columns.tolist()
@@ -1815,7 +1817,6 @@ with st.expander("Scatter settings", expanded=False):
 
     same_pos_scatter = st.checkbox("Limit pool to current position prefix", value=True, key="sc_pos")
 
-    # Filters
     df["Minutes played"] = pd.to_numeric(df["Minutes played"], errors="coerce")
     df["Age"] = pd.to_numeric(df["Age"], errors="coerce")
     min_minutes_s, max_minutes_s = st.slider("Minutes filter", 0, 5000, (500, 5000), key="sc_min")
@@ -1826,37 +1827,32 @@ with st.expander("Scatter settings", expanded=False):
 
     include_selected = st.toggle("Include selected player", value=True, key="sc_include")
 
-    # Labels
     show_labels   = st.toggle("Show player labels", value=False, key="sc_labels_all")
     allow_overlap = st.toggle("Allow overlapping labels (not recommended)", value=False, key="sc_overlap")
-    label_size    = st.slider("Label size", 8, 16, 11, 1, key="sc_lbl_sz")  # default 11
+    label_size    = st.slider("Label size", 8, 16, 11, 1, key="sc_lbl_sz")   # default 11
 
-    # Visuals
     show_medians = st.checkbox("Show median reference lines", value=True, key="sc_medians")
     shade_iqr    = st.checkbox("Shade interquartile range (25–75%)", value=True, key="sc_iqr")
 
-    # Points
-    point_alpha = st.slider("Point opacity", 0.2, 1.0, 0.92, 0.02, key="sc_alpha")
-    point_size  = st.slider("Point size", 24, 220, 150, 2, key="sc_pts")     # default 150
-    marker      = st.selectbox("Marker", ["o", "s", "^", "D"], index=0, key="sc_marker")
+    point_alpha  = st.slider("Point opacity", 0.2, 1.0, 0.92, 0.02, key="sc_alpha")
+    point_size   = st.slider("Point size", 24, 220, 150, 2, key="sc_pts")     # default 150
+    marker       = st.selectbox("Marker", ["o", "s", "^", "D"], index=0, key="sc_marker")
 
-    # Ticks (major only)
-    from matplotlib.ticker import MultipleLocator
-    tick_step = st.selectbox("Major tick step", [0.1, 0.2, 0.5, 1.0, 2.0], index=0, key="sc_tickstep")
+    # Ticks (major only), same step for X and Y
+    tick_step = st.selectbox("Major tick step", [0.05, 0.1, 0.2, 0.5, 1.0], index=1, key="sc_tick")
 
-    # Theme
     theme = st.radio("Theme", ["Light", "Dark"], index=0, horizontal=True, key="sc_theme")
     PAGE_BG = "#ebebeb" if theme == "Light" else "#0a0f1c"
     PLOT_BG = "#f3f3f3" if theme == "Light" else "#0f151f"
     GRID_MAJ = "#d7d7d7" if theme == "Light" else "#3a4050"
-    txt_col = "#111111" if theme == "Light" else "#f5f5f5"
+    GRID_MIN = "#e7e7e7" if theme == "Light" else "#2c3241"
+    txt_col  = "#111111" if theme == "Light" else "#f5f5f5"
 
-    # Colour-by metric for dots
     colour_metric = st.selectbox("Colour dots by metric (scaled within pool)",
                                  [c for c in FEATURES if c in numeric_cols],
                                  index=(FEATURES.index(x_default) if x_default in FEATURES else 0),
                                  key="sc_colour_metric")
-    palette_choice = st.radio("Palette", ["Red–Gold–Green (diverging)", "Light-grey → Black"], index=1, key="sc_palette")
+    palette_choice = st.radio("Palette", ["Red–Gold–Green (diverging)", "Light-grey → Black"], index=0, key="sc_palette")
     reverse_scale  = st.checkbox("Reverse colours", value=False, key="sc_reverse")
 
 # ---- Build pool & plot ----
@@ -1902,34 +1898,36 @@ try:
             st.info("No players in scatter pool after filters.")
         else:
             mpl.rcParams.update({
-                "figure.dpi": 100,
+                "figure.dpi": 100,          # 12.8" × 7.2" -> 1280×720
                 "savefig.dpi": 220,
                 "font.size": 12,
                 "axes.labelsize": 12,
-                "xtick.labelsize": 10,
-                "ytick.labelsize": 10,
-                "axes.edgecolor": "#9ca3af",
+                "xtick.labelsize": 11,
+                "ytick.labelsize": 11,
                 "axes.spines.right": False,
                 "axes.spines.top": False,
-                "axes.formatter.use_mathtext": True,
                 "text.antialiased": True,
             })
 
+            # EXACT 1280×720 figure
             fig, ax = plt.subplots(figsize=(12.8, 7.2), dpi=100)
-            fig.patch.set_facecolor(PAGE_BG); ax.set_facecolor(PLOT_BG)
+            fig.patch.set_facecolor(PAGE_BG)
+            ax.set_facecolor(PLOT_BG)
 
             x_vals = pool_sc[x_metric].to_numpy(float)
             y_vals = pool_sc[y_metric].to_numpy(float)
 
             def padded_limits(arr, pad_frac=0.06):
                 a_min, a_max = float(np.nanmin(arr)), float(np.nanmax(arr))
-                if a_min == a_max: a_min -= 1e-6; a_max += 1e-6
+                if a_min == a_max:
+                    a_min -= 1e-6; a_max += 1e-6
                 pad = (a_max - a_min) * pad_frac
                 return a_min - pad, a_max + pad
+
             xlim = padded_limits(x_vals); ylim = padded_limits(y_vals)
             ax.set_xlim(*xlim); ax.set_ylim(*ylim)
 
-            # ---- Colour mapping (as Series aligned to pool_sc.index) ----
+            # ---- Colour mapping (Series aligned to index) ----
             cvals = pool_sc[colour_metric].to_numpy(float)
             cmin, cmax = float(np.nanmin(cvals)), float(np.nanmax(cvals))
             if cmin == cmax: cmax = cmin + 1e-6
@@ -1941,16 +1939,13 @@ try:
                     red   = np.array([199,  54,  60], dtype=float)
                     gold  = np.array([240, 197, 106], dtype=float)
                     green = np.array([ 61, 166,  91], dtype=float)
-                    if v <= 0.5:
-                        a, b, u = red, gold, v/0.5
-                    else:
-                        a, b, u = gold, green, (v-0.5)/0.5
+                    a, b, u = (red, gold, v/0.5) if v <= 0.5 else (gold, green, (v-0.5)/0.5)
                     return (a + (b-a)*np.clip(u,0,1))/255.0
                 col_array = np.vstack([ramp_rg(v) for v in t])
             else:
                 def ramp_bw(v):
                     lo = np.array([210, 214, 220], dtype=float)
-                    hi = np.array([20,  23,  31], dtype=float)
+                    hi = np.array([ 20,  23,  31], dtype=float)
                     return (lo + (hi-lo)*np.clip(v,0,1))/255.0
                 col_array = np.vstack([ramp_bw(v) for v in t])
 
@@ -1970,15 +1965,16 @@ try:
             ax.scatter(
                 others[x_metric], others[y_metric],
                 s=point_size, c=list(color_series.loc[others.index]),
-                alpha=float(point_alpha), linewidths=0.0, edgecolors="none",
+                alpha=float(point_alpha),
+                edgecolors="none", linewidths=0.0,
                 marker=marker, zorder=2
             )
-            # Selected: SAME SIZE, red fill + white ring
+            # Selected: same size, red fill + white ring
             if not sel.empty:
                 ax.scatter(
                     sel[x_metric], sel[y_metric],
                     s=point_size, c="#C81E1E",
-                    edgecolors="white", linewidths=1.4,
+                    edgecolors="white", linewidths=1.6,
                     marker=marker, zorder=4
                 )
 
@@ -1988,12 +1984,14 @@ try:
                 y_q1, y_q3 = np.nanpercentile(y_vals, [25, 75])
                 ax.axvspan(x_q1, x_q3, color="#cfd3da" if theme=="Light" else "#9aa4b1", alpha=0.25, zorder=1)
                 ax.axhspan(y_q1, y_q3, color="#cfd3da" if theme=="Light" else "#9aa4b1", alpha=0.25, zorder=1)
+
             if show_medians:
                 med_x = float(np.nanmedian(x_vals)); med_y = float(np.nanmedian(y_vals))
-                ax.axvline(med_x, color="#6b7280", ls=(0,(5,4)), lw=1.15, zorder=3)
-                ax.axhline(med_y, color="#6b7280", ls=(0,(5,4)), lw=1.15, zorder=3)
+                med_col = "#000000" if theme == "Light" else "#ffffff"
+                ax.axvline(med_x, color=med_col, ls=(0,(4,4)), lw=2.2, zorder=3)  # bold median
+                ax.axhline(med_y, color=med_col, ls=(0,(4,4)), lw=2.2, zorder=3)
 
-            # Labels (greedy non-overlap; semibold; dark-mode halo tweak)
+            # Labels (optional, non-overlap attempt)
             if show_labels:
                 candidates = others.copy()
                 cx, cy = float(np.nanmedian(x_vals)), float(np.nanmedian(y_vals))
@@ -2047,26 +2045,35 @@ try:
             # ---------- Axes & grid ----------
             ax.set_xlabel(x_metric, fontweight="bold", color=txt_col)
             ax.set_ylabel(y_metric, fontweight="bold", color=txt_col)
-            ax.tick_params(colors=txt_col)
 
-            # Major ticks only (no mini ticks)
-            ax.xaxis.set_major_locator(MultipleLocator(base=float(tick_step)))
-            ax.yaxis.set_major_locator(MultipleLocator(base=float(tick_step)))
-            ax.minorticks_off()  # turn off minor ticks completely
+            # Major ticks only, formatted like 0.1, 0.2… and SEMIBOLD labels
+            step = float(tick_step)
+            ax.xaxis.set_major_locator(MultipleLocator(base=step))
+            ax.yaxis.set_major_locator(MultipleLocator(base=step))
+            ax.xaxis.set_major_formatter(FormatStrFormatter('%.1f'))
+            ax.yaxis.set_major_formatter(FormatStrFormatter('%.1f'))
+            ax.minorticks_off()
 
-            # Grid on majors only
+            # make tick-labels semibold
+            for tick in ax.get_xticklabels() + ax.get_yticklabels():
+                tick.set_fontweight('semibold')
+                tick.set_color(txt_col)
+
             ax.grid(True, which="major", linewidth=0.9, color=GRID_MAJ)
-            # no minor grid
 
             for s in ax.spines.values():
-                s.set_linewidth(0.9); s.set_color("#9ca3af" if theme=="Light" else "#6b7280")
+                s.set_linewidth(0.9)
+                s.set_color("#9ca3af" if theme=="Light" else "#6b7280")
 
-            # Extra top padding before the graph area
-            plt.tight_layout(rect=[0.06, 0.06, 0.98, 0.90])  # smaller 'top' -> more top padding
+            # ----- Extra TOP GAP while preserving 1280×720 canvas -----
+            # shrink the axes a bit downwards to create headroom
+            fig.subplots_adjust(left=0.08, right=0.98, bottom=0.10, top=0.86)
+
             st.pyplot(fig, use_container_width=False)
 except Exception as e:
     st.info(f"Scatter could not be drawn: {e}")
-# =============================================================================================
+# ==========================================================================================================
+
 
 
 
