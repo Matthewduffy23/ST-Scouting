@@ -1784,7 +1784,7 @@ else:
 
 
 
-# ============================== SCATTERPLOT (1280x720 + top gap + semibold ticks) ==============================
+# ============================== SCATTERPLOT (1280x720 + top gap + extra palettes) ==============================
 st.markdown("---")
 st.header("📈 Scatterplot")
 
@@ -1801,8 +1801,8 @@ with st.expander("Scatter settings", expanded=False):
     leagues_available_sc = sorted(df["League"].dropna().unique().tolist())
     player_league = player_row.iloc[0]["League"] if not player_row.empty else None
     preset_sc = st.selectbox("League preset",
-                             ["Player's league","Top 5 Europe","Top 20 Europe","EFL (England 2–4)","Custom"],
-                             index=0, key="sc_preset")
+        ["Player's league","Top 5 Europe","Top 20 Europe","EFL (England 2–4)","Custom"],
+        index=0, key="sc_preset")
     preset_map_sc = {
         "Player's league": {player_league} if player_league else set(),
         "Top 5 Europe": set(PRESET_LEAGUES.get("Top 5 Europe", [])),
@@ -1817,6 +1817,7 @@ with st.expander("Scatter settings", expanded=False):
 
     same_pos_scatter = st.checkbox("Limit pool to current position prefix", value=True, key="sc_pos")
 
+    # Filters
     df["Minutes played"] = pd.to_numeric(df["Minutes played"], errors="coerce")
     df["Age"] = pd.to_numeric(df["Age"], errors="coerce")
     min_minutes_s, max_minutes_s = st.slider("Minutes filter", 0, 5000, (500, 5000), key="sc_min")
@@ -1827,32 +1828,48 @@ with st.expander("Scatter settings", expanded=False):
 
     include_selected = st.toggle("Include selected player", value=True, key="sc_include")
 
+    # Labels
     show_labels   = st.toggle("Show player labels", value=False, key="sc_labels_all")
     allow_overlap = st.toggle("Allow overlapping labels (not recommended)", value=False, key="sc_overlap")
-    label_size    = st.slider("Label size", 8, 16, 11, 1, key="sc_lbl_sz")   # default 11
+    label_size    = st.slider("Label size", 8, 16, 11, 1, key="sc_lbl_sz")  # default 11
 
-    show_medians = st.checkbox("Show median reference lines", value=True, key="sc_medians")
-    shade_iqr    = st.checkbox("Shade interquartile range (25–75%)", value=True, key="sc_iqr")
+    # Visuals
+    show_medians  = st.checkbox("Show median reference lines", value=True, key="sc_medians")
+    shade_iqr     = st.checkbox("Shade interquartile range (25–75%)", value=True, key="sc_iqr")
 
-    point_alpha  = st.slider("Point opacity", 0.2, 1.0, 0.92, 0.02, key="sc_alpha")
-    point_size   = st.slider("Point size", 24, 220, 150, 2, key="sc_pts")     # default 150
-    marker       = st.selectbox("Marker", ["o", "s", "^", "D"], index=0, key="sc_marker")
+    # Points
+    point_alpha   = st.slider("Point opacity", 0.2, 1.0, 0.92, 0.02, key="sc_alpha")
+    point_size    = st.slider("Point size", 24, 220, 150, 2, key="sc_pts")     # default 150
+    marker        = st.selectbox("Marker", ["o", "s", "^", "D"], index=0, key="sc_marker")
 
-    # Ticks (major only), same step for X and Y
+    # Ticks (major only)
     tick_step = st.selectbox("Major tick step", [0.05, 0.1, 0.2, 0.5, 1.0], index=1, key="sc_tick")
 
+    # Theme
     theme = st.radio("Theme", ["Light", "Dark"], index=0, horizontal=True, key="sc_theme")
     PAGE_BG = "#ebebeb" if theme == "Light" else "#0a0f1c"
     PLOT_BG = "#f3f3f3" if theme == "Light" else "#0f151f"
     GRID_MAJ = "#d7d7d7" if theme == "Light" else "#3a4050"
-    GRID_MIN = "#e7e7e7" if theme == "Light" else "#2c3241"
     txt_col  = "#111111" if theme == "Light" else "#f5f5f5"
 
+    # Colour-by metric + palettes
     colour_metric = st.selectbox("Colour dots by metric (scaled within pool)",
-                                 [c for c in FEATURES if c in numeric_cols],
-                                 index=(FEATURES.index(x_default) if x_default in FEATURES else 0),
-                                 key="sc_colour_metric")
-    palette_choice = st.radio("Palette", ["Red–Gold–Green (diverging)", "Light-grey → Black"], index=0, key="sc_palette")
+        [c for c in FEATURES if c in numeric_cols],
+        index=(FEATURES.index(x_default) if x_default in FEATURES else 0),
+        key="sc_colour_metric")
+
+    palette_choice = st.selectbox(
+        "Palette",
+        [
+            "Red–Gold–Green (diverging)",
+            "Light-grey → Black",
+            "Light-Red → Dark-Red",
+            "Light-Blue → Dark-Blue",
+            "Light-Green → Dark-Green",
+            "Purple ↔ Gold (diverging)"
+        ],
+        index=0, key="sc_palette"
+    )
     reverse_scale  = st.checkbox("Reverse colours", value=False, key="sc_reverse")
 
 # ---- Build pool & plot ----
@@ -1934,21 +1951,29 @@ try:
             t = (cvals - cmin) / (cmax - cmin)
             if reverse_scale: t = 1.0 - t
 
-            if palette_choice.startswith("Red–Gold–Green"):
-                def ramp_rg(v):
-                    red   = np.array([199,  54,  60], dtype=float)
-                    gold  = np.array([240, 197, 106], dtype=float)
-                    green = np.array([ 61, 166,  91], dtype=float)
-                    a, b, u = (red, gold, v/0.5) if v <= 0.5 else (gold, green, (v-0.5)/0.5)
-                    return (a + (b-a)*np.clip(u,0,1))/255.0
-                col_array = np.vstack([ramp_rg(v) for v in t])
-            else:
-                def ramp_bw(v):
-                    lo = np.array([210, 214, 220], dtype=float)
-                    hi = np.array([ 20,  23,  31], dtype=float)
-                    return (lo + (hi-lo)*np.clip(v,0,1))/255.0
-                col_array = np.vstack([ramp_bw(v) for v in t])
+            def interp(a, b, u):
+                a = np.array(a, dtype=float); b = np.array(b, dtype=float)
+                return (a + (b - a) * np.clip(u, 0, 1)) / 255.0
 
+            if palette_choice == "Red–Gold–Green (diverging)":
+                def map_col(v):
+                    red, gold, green = [199,54,60], [240,197,106], [61,166,91]
+                    return interp(red, gold, v/0.5) if v <= 0.5 else interp(gold, green, (v-0.5)/0.5)
+            elif palette_choice == "Light-grey → Black":
+                def map_col(v): return interp([210,214,220], [20,23,31], v)
+            elif palette_choice == "Light-Red → Dark-Red":
+                def map_col(v): return interp([252,190,190], [139,0,0], v)
+            elif palette_choice == "Light-Blue → Dark-Blue":
+                def map_col(v): return interp([191,210,255], [10,42,102], v)
+            elif palette_choice == "Light-Green → Dark-Green":
+                def map_col(v): return interp([196,235,203], [12,92,48], v)
+            else:  # "Purple ↔ Gold (diverging)"
+                def map_col(v):
+                    purple, gold = [96,55,140], [240,197,106]
+                    mid = [180,150,210]
+                    return interp(purple, mid, v/0.5) if v <= 0.5 else interp(mid, gold, (v-0.5)/0.5)
+
+            col_array = np.vstack([map_col(v) for v in t])
             color_series = pd.Series(list(map(tuple, col_array)), index=pool_sc.index)
 
             # Split selected
@@ -1961,7 +1986,7 @@ try:
                 sel    = pool_sc.iloc[0:0]
 
             # ---------- Points ----------
-            # Everyone else: SOLID fill, NO ring
+            # Others: solid fill, no ring
             ax.scatter(
                 others[x_metric], others[y_metric],
                 s=point_size, c=list(color_series.loc[others.index]),
@@ -1969,7 +1994,7 @@ try:
                 edgecolors="none", linewidths=0.0,
                 marker=marker, zorder=2
             )
-            # Selected: same size, red fill + white ring
+            # Selected: same size, red with white ring
             if not sel.empty:
                 ax.scatter(
                     sel[x_metric], sel[y_metric],
@@ -1988,8 +2013,8 @@ try:
             if show_medians:
                 med_x = float(np.nanmedian(x_vals)); med_y = float(np.nanmedian(y_vals))
                 med_col = "#000000" if theme == "Light" else "#ffffff"
-                ax.axvline(med_x, color=med_col, ls=(0,(4,4)), lw=2.2, zorder=3)  # bold median
-                ax.axhline(med_y, color=med_col, ls=(0,(4,4)), lw=2.2, zorder=3)
+                ax.axvline(med_x, color=med_col, ls=(0,(4,4)), lw=2.0, zorder=3)  # semibold
+                ax.axhline(med_y, color=med_col, ls=(0,(4,4)), lw=2.0, zorder=3)
 
             # Labels (optional, non-overlap attempt)
             if show_labels:
@@ -2013,8 +2038,7 @@ try:
                     tsel.set_path_effects([pe.withStroke(linewidth=2.0,
                                                          foreground=("#ffffff" if theme=="Light" else "#1e293b"),
                                                          alpha=0.9)])
-                    texts.append(tsel)
-                    placed.append((sx, sy))
+                    texts.append(tsel); placed.append((sx, sy))
 
                 for _, r in candidates.iterrows():
                     px, py = float(r[x_metric]), float(r[y_metric])
@@ -2029,35 +2053,28 @@ try:
                     t.set_path_effects([pe.withStroke(linewidth=2.0,
                                                       foreground=("#ffffff" if theme=="Light" else "#1e293b"),
                                                       alpha=0.9)])
-                    texts.append(t)
-                    placed.append((px, py))
+                    texts.append(t); placed.append((px, py))
 
                 if not allow_overlap and texts and _HAS_ADJUST:
-                    adjust_text(
-                        texts, ax=ax,
-                        only_move={"points":"y", "text":"xy"},
-                        autoalign=True, precision=0.001, lim=150,
-                        expand_text=(1.05, 1.10), expand_points=(1.05, 1.10),
-                        force_text=(0.08, 0.12), force_points=(0.08, 0.12),
-                        arrowprops=None
-                    )
+                    adjust_text(texts, ax=ax, only_move={"points":"y", "text":"xy"},
+                                autoalign=True, precision=0.001, lim=150,
+                                expand_text=(1.05, 1.10), expand_points=(1.05, 1.10),
+                                force_text=(0.08, 0.12), force_points=(0.08, 0.12),
+                                arrowprops=None)
 
             # ---------- Axes & grid ----------
             ax.set_xlabel(x_metric, fontweight="bold", color=txt_col)
             ax.set_ylabel(y_metric, fontweight="bold", color=txt_col)
 
-            # Major ticks only, formatted like 0.1, 0.2… and SEMIBOLD labels
+            # Major ticks only, formatted like 0.1, 0.2… & semibold
             step = float(tick_step)
             ax.xaxis.set_major_locator(MultipleLocator(base=step))
             ax.yaxis.set_major_locator(MultipleLocator(base=step))
             ax.xaxis.set_major_formatter(FormatStrFormatter('%.1f'))
             ax.yaxis.set_major_formatter(FormatStrFormatter('%.1f'))
             ax.minorticks_off()
-
-            # make tick-labels semibold
             for tick in ax.get_xticklabels() + ax.get_yticklabels():
-                tick.set_fontweight('semibold')
-                tick.set_color(txt_col)
+                tick.set_fontweight('semibold'); tick.set_color(txt_col)
 
             ax.grid(True, which="major", linewidth=0.9, color=GRID_MAJ)
 
@@ -2065,9 +2082,9 @@ try:
                 s.set_linewidth(0.9)
                 s.set_color("#9ca3af" if theme=="Light" else "#6b7280")
 
-            # ----- Extra TOP GAP while preserving 1280×720 canvas -----
-            # shrink the axes a bit downwards to create headroom
-            fig.subplots_adjust(left=0.08, right=0.98, bottom=0.10, top=0.86)
+            # ===== Fixed TOP GAP while preserving 1280×720 =====
+            # Don't call tight_layout (it removes the gap). Use subplots_adjust:
+            fig.subplots_adjust(left=0.08, right=0.98, bottom=0.10, top=0.80)  # top=0.80 => clear headroom
 
             st.pyplot(fig, use_container_width=False)
 except Exception as e:
