@@ -1784,7 +1784,7 @@ else:
 
 
 
-# ============================== SCATTERPLOT (FINAL — fixed colour indexing) ==============================
+# ============================== SCATTERPLOT (FINAL — your spec) ==============================
 st.markdown("---")
 st.header("📈 Scatterplot")
 
@@ -1815,6 +1815,7 @@ with st.expander("Scatter settings", expanded=False):
 
     same_pos_scatter = st.checkbox("Limit pool to current position prefix", value=True, key="sc_pos")
 
+    # Filters
     df["Minutes played"] = pd.to_numeric(df["Minutes played"], errors="coerce")
     df["Age"] = pd.to_numeric(df["Age"], errors="coerce")
     min_minutes_s, max_minutes_s = st.slider("Minutes filter", 0, 5000, (500, 5000), key="sc_min")
@@ -1825,24 +1826,32 @@ with st.expander("Scatter settings", expanded=False):
 
     include_selected = st.toggle("Include selected player", value=True, key="sc_include")
 
+    # Labels
     show_labels   = st.toggle("Show player labels", value=False, key="sc_labels_all")
     allow_overlap = st.toggle("Allow overlapping labels (not recommended)", value=False, key="sc_overlap")
-    label_size    = st.slider("Label size", 8, 16, 11, 1, key="sc_lbl_sz")
+    label_size    = st.slider("Label size", 8, 16, 11, 1, key="sc_lbl_sz")  # default 11
 
+    # Visuals
     show_medians = st.checkbox("Show median reference lines", value=True, key="sc_medians")
     shade_iqr    = st.checkbox("Shade interquartile range (25–75%)", value=True, key="sc_iqr")
 
+    # Points
     point_alpha = st.slider("Point opacity", 0.2, 1.0, 0.92, 0.02, key="sc_alpha")
-    point_size  = st.slider("Point size", 24, 220, 84, 2, key="sc_pts")
+    point_size  = st.slider("Point size", 24, 220, 150, 2, key="sc_pts")     # default 150
     marker      = st.selectbox("Marker", ["o", "s", "^", "D"], index=0, key="sc_marker")
 
+    # Ticks (major only)
+    from matplotlib.ticker import MultipleLocator
+    tick_step = st.selectbox("Major tick step", [0.1, 0.2, 0.5, 1.0, 2.0], index=0, key="sc_tickstep")
+
+    # Theme
     theme = st.radio("Theme", ["Light", "Dark"], index=0, horizontal=True, key="sc_theme")
     PAGE_BG = "#ebebeb" if theme == "Light" else "#0a0f1c"
     PLOT_BG = "#f3f3f3" if theme == "Light" else "#0f151f"
     GRID_MAJ = "#d7d7d7" if theme == "Light" else "#3a4050"
-    GRID_MIN = "#e7e7e7" if theme == "Light" else "#2c3241"
     txt_col = "#111111" if theme == "Light" else "#f5f5f5"
 
+    # Colour-by metric for dots
     colour_metric = st.selectbox("Colour dots by metric (scaled within pool)",
                                  [c for c in FEATURES if c in numeric_cols],
                                  index=(FEATURES.index(x_default) if x_default in FEATURES else 0),
@@ -1945,7 +1954,6 @@ try:
                     return (lo + (hi-lo)*np.clip(v,0,1))/255.0
                 col_array = np.vstack([ramp_bw(v) for v in t])
 
-            # Make a Series so we can select by label-safe indices
             color_series = pd.Series(list(map(tuple, col_array)), index=pool_sc.index)
 
             # Split selected
@@ -1957,24 +1965,21 @@ try:
                 others = pool_sc
                 sel    = pool_sc.iloc[0:0]
 
-            # Points (use color_series.loc[...] to avoid out-of-bounds)
+            # ---------- Points ----------
+            # Everyone else: SOLID fill, NO ring
             ax.scatter(
                 others[x_metric], others[y_metric],
                 s=point_size, c=list(color_series.loc[others.index]),
-                alpha=float(point_alpha), linewidths=0.9, edgecolors="white", marker=marker, zorder=2
+                alpha=float(point_alpha), linewidths=0.0, edgecolors="none",
+                marker=marker, zorder=2
             )
-
-            # Selected in red
+            # Selected: SAME SIZE, red fill + white ring
             if not sel.empty:
                 ax.scatter(
                     sel[x_metric], sel[y_metric],
-                    s=max(point_size*2.5, 100), c="#C81E1E", edgecolors="white",
-                    linewidths=1.2, marker=marker, zorder=4
-                )
-                ax.scatter(
-                    sel[x_metric], sel[y_metric],
-                    s=max(point_size*2.5, 140), facecolors="none", edgecolors="#22d3ee",
-                    linewidths=2.0, marker=marker, zorder=5
+                    s=point_size, c="#C81E1E",
+                    edgecolors="white", linewidths=1.4,
+                    marker=marker, zorder=4
                 )
 
             # IQR & medians
@@ -1988,7 +1993,7 @@ try:
                 ax.axvline(med_x, color="#6b7280", ls=(0,(5,4)), lw=1.15, zorder=3)
                 ax.axhline(med_y, color="#6b7280", ls=(0,(5,4)), lw=1.15, zorder=3)
 
-            # Labels (greedy non-overlap; normal weight; dark-mode halo tweak)
+            # Labels (greedy non-overlap; semibold; dark-mode halo tweak)
             if show_labels:
                 candidates = others.copy()
                 cx, cy = float(np.nanmedian(x_vals)), float(np.nanmedian(y_vals))
@@ -2003,7 +2008,7 @@ try:
                     sx = float(sel.iloc[0][x_metric]); sy = float(sel.iloc[0][y_metric])
                     tsel = ax.annotate(
                         sel.iloc[0]["Player"], (sx, sy),
-                        xytext=(8, 10), textcoords="offset points",
+                        xytext=(10, 12), textcoords="offset points",
                         fontsize=label_size, fontweight="semibold", color=txt_col,
                         ha="left", va="bottom", zorder=6
                     )
@@ -2019,7 +2024,7 @@ try:
                         continue
                     t = ax.annotate(
                         r["Player"], (px, py),
-                        xytext=(8, 10), textcoords="offset points",
+                        xytext=(10, 12), textcoords="offset points",
                         fontsize=label_size, fontweight="semibold", color=txt_col,
                         ha="left", va="bottom", zorder=4
                     )
@@ -2039,20 +2044,29 @@ try:
                         arrowprops=None
                     )
 
+            # ---------- Axes & grid ----------
             ax.set_xlabel(x_metric, fontweight="bold", color=txt_col)
             ax.set_ylabel(y_metric, fontweight="bold", color=txt_col)
             ax.tick_params(colors=txt_col)
+
+            # Major ticks only (no mini ticks)
+            ax.xaxis.set_major_locator(MultipleLocator(base=float(tick_step)))
+            ax.yaxis.set_major_locator(MultipleLocator(base=float(tick_step)))
+            ax.minorticks_off()  # turn off minor ticks completely
+
+            # Grid on majors only
             ax.grid(True, which="major", linewidth=0.9, color=GRID_MAJ)
-            ax.grid(True, which="minor", linewidth=0.55, color=GRID_MIN, alpha=0.85)
-            ax.minorticks_on()
+            # no minor grid
+
             for s in ax.spines.values():
                 s.set_linewidth(0.9); s.set_color("#9ca3af" if theme=="Light" else "#6b7280")
 
-            plt.tight_layout(rect=[0.04, 0.04, 0.98, 0.98])
+            # Extra top padding before the graph area
+            plt.tight_layout(rect=[0.06, 0.06, 0.98, 0.90])  # smaller 'top' -> more top padding
             st.pyplot(fig, use_container_width=False)
 except Exception as e:
     st.info(f"Scatter could not be drawn: {e}")
-# ======================================================================
+# =============================================================================================
 
 
 
