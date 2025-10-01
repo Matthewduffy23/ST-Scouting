@@ -1784,7 +1784,7 @@ else:
 
 
 
-# ============================== SCATTERPLOT — exact canvas + top gap + smart labels ==============================
+# ============================== SCATTERPLOT — title, auto ticks, extra headroom ==============================
 st.markdown("---")
 st.header("📈 Scatterplot")
 
@@ -1828,9 +1828,9 @@ with st.expander("Scatter settings", expanded=False):
 
     # Selected player & labels
     include_selected = st.toggle("Include selected player", value=True, key="sc_include")
-    show_labels   = st.toggle("Show player labels", value=True, key="sc_labels_all")  # default ON
+    show_labels   = st.toggle("Show player labels", value=True, key="sc_labels_all")
     allow_overlap = st.toggle("Allow overlapping labels (not recommended)", value=False, key="sc_overlap")
-    label_size    = st.slider("Label size", 8, 16, 11, 1, key="sc_lbl_sz")
+    label_size    = st.slider("Label size", 8, 20, 12, 1, key="sc_lbl_sz")  # default 12
 
     # Visual aids
     show_medians  = st.checkbox("Show median reference lines", value=True, key="sc_medians")
@@ -1838,11 +1838,11 @@ with st.expander("Scatter settings", expanded=False):
 
     # Points
     point_alpha   = st.slider("Point opacity", 0.2, 1.0, 0.92, 0.02, key="sc_alpha")
-    point_size    = st.slider("Point size", 24, 220, 150, 2, key="sc_pts")
+    point_size    = st.slider("Point size", 24, 300, 200, 2, key="sc_pts")  # default 200
     marker        = st.selectbox("Marker", ["o", "s", "^", "D"], index=0, key="sc_marker")
 
-    # Ticks (major only)
-    tick_step = st.selectbox("Major tick step", [0.05, 0.1, 0.2, 0.5, 1.0], index=1, key="sc_tick")
+    # Ticks (Auto or manual)
+    tick_mode = st.selectbox("Tick spacing", ["Auto (recommended)", "0.05", "0.1", "0.2", "0.5", "1.0"], index=0, key="sc_tick_mode")
 
     # Theme
     theme = st.radio("Theme", ["Light", "Dark"], index=0, horizontal=True, key="sc_theme")
@@ -1864,19 +1864,24 @@ with st.expander("Scatter settings", expanded=False):
             "Light-Red → Dark-Red",
             "Light-Blue → Dark-Blue",
             "Light-Green → Dark-Green",
-            "Purple ↔ Gold (diverging)"
+            "Purple ↔ Gold (diverging)",
+            "All White",
+            "All Black",
         ],
         index=0, key="sc_palette"
     )
     reverse_scale  = st.checkbox("Reverse colours", value=False, key="sc_reverse")
 
-    # === Canvas & top gap ===
-    canvas_preset = st.selectbox("Canvas size (px)", ["1280×720", "1600×900", "1920×820", "1920×1080"], index=2)
+    # === Canvas & top gap & title ===
+    canvas_preset = st.selectbox("Canvas size (px)", ["1280×720", "1600×900", "1920×820", "1920×1080"], index=1)
     w_px, h_px = map(int, canvas_preset.replace("×", "x").replace(" ", "").split("x"))
-    top_gap_px = st.slider("Top blank gap (px)", 0, 200, 100, 5)
+    top_gap_px = st.slider("Top blank gap (px)", 0, 240, 100, 5)
 
-    # Exact-pixel render (prevents Streamlit stretching)
-    render_exact = st.checkbox("Render exact pixels (PNG)", value=True, help="Ensures the displayed image matches the chosen pixel size exactly.")
+    show_title = st.checkbox("Show custom title", value=False, key="sc_show_title")
+    custom_title = st.text_input("Custom title", "xG per 90 vs Non-penalty goals per 90", key="sc_title")
+
+    # Exact-pixel render
+    render_exact = st.checkbox("Render exact pixels (PNG)", value=True)
 
 # ---- Build pool ----
 try:
@@ -1940,12 +1945,28 @@ try:
             x_vals = pool_sc[x_metric].to_numpy(float)
             y_vals = pool_sc[y_metric].to_numpy(float)
 
-            def padded_limits(arr, pad_frac=0.06):
+            # ----- Nice step (Tableau-ish) -----
+            import math
+            def nice_step(vmin, vmax, target_ticks=6):
+                span = abs(vmax - vmin)
+                if span <= 0 or not math.isfinite(span): return 1.0
+                raw = span / max(target_ticks, 2)
+                power = 10 ** math.floor(math.log10(raw))
+                mult = raw / power
+                if mult <= 1: k = 1
+                elif mult <= 2: k = 2
+                elif mult <= 2.5: k = 2.5
+                elif mult <= 5: k = 5
+                else: k = 10
+                return k * power
+
+            # ----- Padded limits with extra headroom on the max side -----
+            def padded_limits(arr, pad_frac=0.06, headroom=0.03):
                 a_min, a_max = float(np.nanmin(arr)), float(np.nanmax(arr))
-                if a_min == a_max:
-                    a_min -= 1e-6; a_max += 1e-6
-                pad = (a_max - a_min) * pad_frac
-                return a_min - pad, a_max + pad
+                if a_min == a_max: a_min -= 1e-6; a_max += 1e-6
+                span = (a_max - a_min)
+                pad = span * pad_frac
+                return a_min - pad, a_max + pad + span * headroom
 
             xlim = padded_limits(x_vals); ylim = padded_limits(y_vals)
             ax.set_xlim(*xlim); ax.set_ylim(*ylim)
@@ -1973,10 +1994,14 @@ try:
                 def map_col(v): return interp([191,210,255], [10,42,102], v)
             elif palette_choice == "Light-Green → Dark-Green":
                 def map_col(v): return interp([196,235,203], [12,92,48], v)
-            else:  # Purple ↔ Gold
+            elif palette_choice == "Purple ↔ Gold (diverging)":
                 def map_col(v):
                     purple, mid, gold = [96,55,140], [180,150,210], [240,197,106]
                     return interp(purple, mid, v/0.5) if v <= 0.5 else interp(mid, gold, (v-0.5)/0.5)
+            elif palette_choice == "All White":
+                def map_col(v): return np.array([255,255,255])/255.0
+            else:  # "All Black"
+                def map_col(v): return np.array([0,0,0])/255.0
 
             col_array = np.vstack([map_col(v) for v in t])
             color_series = pd.Series(list(map(tuple, col_array)), index=pool_sc.index)
@@ -2019,7 +2044,6 @@ try:
                 ax.axhline(med_y, color=med_col, ls=(0,(4,4)), lw=2.2, zorder=3)
 
             # ---------- Labels ----------
-            from matplotlib import patheffects as pe
             texts = []
             if not sel.empty:
                 sx, sy = float(sel.iloc[0][x_metric]), float(sel.iloc[0][y_metric])
@@ -2075,11 +2099,23 @@ try:
             ax.set_xlabel(x_metric, fontweight="bold", color=txt_col)
             ax.set_ylabel(y_metric, fontweight="bold", color=txt_col)
 
-            step = float(tick_step)
-            ax.xaxis.set_major_locator(MultipleLocator(base=step))
-            ax.yaxis.set_major_locator(MultipleLocator(base=step))
-            ax.xaxis.set_major_formatter(FormatStrFormatter('%.1f'))
-            ax.yaxis.set_major_formatter(FormatStrFormatter('%.1f'))
+            if tick_mode.startswith("Auto"):
+                step_x = nice_step(*xlim, target_ticks=6)
+                step_y = nice_step(*ylim, target_ticks=6)
+            else:
+                step_x = step_y = float(tick_mode)
+
+            ax.xaxis.set_major_locator(MultipleLocator(base=step_x))
+            ax.yaxis.set_major_locator(MultipleLocator(base=step_y))
+
+            def decimals(step):
+                if step >= 1: return 0
+                if step >= 0.1: return 1
+                if step >= 0.01: return 2
+                return 3
+
+            ax.xaxis.set_major_formatter(FormatStrFormatter(f'%.{decimals(step_x)}f'))
+            ax.yaxis.set_major_formatter(FormatStrFormatter(f'%.{decimals(step_y)}f'))
             ax.minorticks_off()
             for tick in ax.get_xticklabels() + ax.get_yticklabels():
                 tick.set_fontweight('semibold'); tick.set_color(txt_col)
@@ -2093,13 +2129,21 @@ try:
             top_frac = 1.0 - (top_gap_px / float(h_px))
             fig.subplots_adjust(left=0.075, right=0.985, bottom=0.105, top=top_frac)
 
+            # Optional title centered in the gap
+            if show_title and custom_title.strip():
+                title_col = "#111111" if theme == "Light" else "#f5f5f5"
+                # place in the center of the gap area
+                y_gap_center = top_frac + (1 - top_frac) * 0.5
+                fig.text(0.5, y_gap_center, custom_title.strip(),
+                         ha="center", va="center", color=title_col,
+                         fontsize=16, fontweight="semibold")
+
             if render_exact:
-                # Render to PNG at the exact size, then display at that pixel width.
                 from io import BytesIO
                 buf = BytesIO()
                 fig.savefig(buf, format="png", dpi=100, facecolor=fig.get_facecolor(), bbox_inches="tight")
                 buf.seek(0)
-                st.image(buf, width=w_px)  # exact width in pixels
+                st.image(buf, width=w_px)
             else:
                 st.pyplot(fig, use_container_width=False)
 
