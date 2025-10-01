@@ -1784,200 +1784,313 @@ else:
 
 
 
-# ===== Scatter Plot (PRO, working) =====
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-from matplotlib import patheffects as pe
-import numpy as np
+# ============================== (A) SCATTERPLOT — Goals vs xG (Pro + Controls) ==============================
+st.markdown("---")
+st.header("📈 Scatterplot")
 
-# Optional: proper label collision handling
+# ---------- Settings UI ----------
+with st.expander("Scatter settings", expanded=False):
+    # Axis metric picks (defaults as requested)
+    numeric_cols = df.select_dtypes(include="number").columns.tolist()
+    x_default = "Non-penalty goals per 90"
+    y_default = "xG per 90"
+    x_metric = st.selectbox(
+        "X-axis metric",
+        [c for c in FEATURES if c in numeric_cols],
+        index=(FEATURES.index(x_default) if x_default in FEATURES else 0),
+        key="sc_x",
+    )
+    y_metric = st.selectbox(
+        "Y-axis metric",
+        [c for c in FEATURES if c in numeric_cols],
+        index=(FEATURES.index(y_default) if y_default in FEATURES else 1),
+        key="sc_y",
+    )
+
+    # Pool: default = player's league; presets + custom add-ons
+    leagues_available_sc = sorted(df["League"].dropna().unique().tolist())
+    player_league = player_row.iloc[0]["League"] if not player_row.empty else None
+
+    preset_choices_sc = [
+        "Player's league",
+        "Top 5 Europe",
+        "Top 20 Europe",
+        "EFL (England 2–4)",
+        "Custom",
+    ]
+    preset_sc = st.selectbox("League preset", preset_choices_sc, index=0, key="sc_preset")
+
+    preset_map_sc = {
+        "Player's league": {player_league} if player_league else set(),
+        "Top 5 Europe": set(PRESET_LEAGUES.get("Top 5 Europe", [])),
+        "Top 20 Europe": set(PRESET_LEAGUES.get("Top 20 Europe", [])),
+        "EFL (England 2–4)": set(PRESET_LEAGUES.get("EFL (England 2–4)", [])),
+        "Custom": set(),
+    }
+    preset_set = preset_map_sc.get(preset_sc, set())
+    add_leagues_sc = st.multiselect("Add leagues", leagues_available_sc, default=[], key="sc_add_leagues")
+    leagues_scatter = sorted(set(add_leagues_sc) | preset_set)
+
+    # If user left it empty, fall back to player's league so the plot always works
+    if not leagues_scatter and player_league:
+        leagues_scatter = [player_league]
+
+    same_pos_scatter = st.checkbox("Limit pool to current position prefix", value=True, key="sc_pos")
+
+    # Filters: minutes, age, league strength (quality)
+    df["Minutes played"] = pd.to_numeric(df["Minutes played"], errors="coerce")
+    df["Age"] = pd.to_numeric(df["Age"], errors="coerce")
+    min_minutes_s, max_minutes_s = st.slider("Minutes filter", 0, 5000, (500, 5000), key="sc_min")
+    age_min_bound = int(np.nanmin(df["Age"])) if df["Age"].notna().any() else 14
+    age_max_bound = int(np.nanmax(df["Age"])) if df["Age"].notna().any() else 45
+    min_age_s, max_age_s = st.slider("Age filter", age_min_bound, age_max_bound, (16, 40), key="sc_age")
+
+    min_strength_s, max_strength_s = st.slider("League quality (strength)", 0, 101, (0, 101), key="sc_ls")
+
+    # Label & inclusion toggles
+    include_selected = st.toggle("Include selected player", value=True, key="sc_include")
+    label_all = st.toggle("Label ALL players in chart", value=False, key="sc_labels_all")
+    allow_overlap = st.toggle("Allow overlapping labels", value=False, key="sc_overlap")
+
+    # Visual improvements
+    show_medians = st.checkbox("Show median reference lines", value=True, key="sc_medians")
+    shade_iqr = st.checkbox("Shade interquartile range (25–75%)", value=True, key="sc_iqr")
+
+    # Point/marker controls
+    point_alpha = st.slider("Point opacity", 0.2, 1.0, 0.85, 0.05, key="sc_alpha")
+    point_size  = st.slider("Point size", 10, 140, 32, 2, key="sc_pts")
+    marker      = st.selectbox("Marker", ["o", "x", "s", "^", "D"], index=0, key="sc_marker")
+
+    # -------- Colours & Theme --------
+    with st.expander("🎨 Colours & Theme", expanded=False):
+        theme = st.radio("Theme preset", ["Light", "Dark"], index=0, horizontal=True, key="sc_theme")
+        colour_by = st.selectbox("Colour points by", ["Single colour", "League"], index=0, key="sc_colour_by")
+        base_point_colour = st.color_picker("Point colour", value="#111827", key="sc_col_point")
+        selected_colour   = st.color_picker("Selected player colour", value="#C81E1E", key="sc_col_sel")
+        page_bg   = st.color_picker("Page background", "#f3f4f6" if theme=="Light" else "#0f1116", key="sc_col_page")
+        plot_bg   = st.color_picker("Plot background", "#f5f5f5" if theme=="Light" else "#20252e", key="sc_col_plot")
+        grid_major = st.color_picker("Grid (major)", "#e5e7eb" if theme=="Light" else "#3a4050", key="sc_col_gmaj")
+        grid_minor = st.color_picker("Grid (minor)", "#eceff1" if theme=="Light" else "#2c3241", key="sc_col_gmin")
+
+# ---- Build scatter pool ----
 try:
-    from adjustText import adjust_text
-    _HAS_ADJUST = True
-except Exception:
-    _HAS_ADJUST = False
+    pool_sc = df[df["League"].isin(leagues_scatter)].copy()
+    if same_pos_scatter and not player_row.empty:
+        pool_sc = pool_sc[pool_sc["Position"].astype(str).apply(position_filter)]
 
-# ---- Guards / fallbacks (so this runs even if some controls weren't created) ----
-# Accept either pool_sc or pool_df (we'll prefer pool_sc if present)
-if "pool_sc" not in locals() or pool_sc is None:
-    pool_sc = locals().get("pool_df", pd.DataFrame())
+    # numeric + filters
+    pool_sc["Minutes played"] = pd.to_numeric(pool_sc["Minutes played"], errors="coerce")
+    pool_sc["Age"] = pd.to_numeric(pool_sc["Age"], errors="coerce")
+    pool_sc = pool_sc[pool_sc["Minutes played"].between(min_minutes_s, max_minutes_s)]
+    pool_sc = pool_sc[pool_sc["Age"].between(min_age_s, max_age_s)]
 
-# Basic defaults if these aren't in scope
-x_metric = locals().get("x_metric", "Non-penalty goals per 90")
-y_metric = locals().get("y_metric", "xG per 90")
-include_selected = bool(locals().get("include_selected", True))
-selected_player_name = locals().get("selected_player_name", None)
-point_alpha = float(locals().get("point_alpha", 0.85))
-shade_iqr = bool(locals().get("shade_iqr", True))
-show_medians = bool(locals().get("show_medians", True))
-label_all = bool(locals().get("label_all", False))
-allow_overlap = bool(locals().get("allow_overlap", False))
+    # league quality filter
+    pool_sc["League Strength"] = pool_sc["League"].map(LEAGUE_STRENGTHS).fillna(0.0)
+    pool_sc = pool_sc[
+        (pool_sc["League Strength"] >= float(min_strength_s))
+        & (pool_sc["League Strength"] <= float(max_strength_s))
+    ]
 
-# Validate pool + metrics
-if pool_sc is None or pool_sc.empty:
-    st.info("No players in scatter pool after filters.")
-elif x_metric not in pool_sc.columns or y_metric not in pool_sc.columns:
-    st.info("Selected axis metrics are missing from the dataset.")
-else:
-    # Coerce to numeric & drop NaNs for chosen axes
-    _df = pool_sc.copy()
-    _df[x_metric] = pd.to_numeric(_df[x_metric], errors="coerce")
-    _df[y_metric] = pd.to_numeric(_df[y_metric], errors="coerce")
-    _df = _df.dropna(subset=[x_metric, y_metric])
-
-    if _df.empty:
-        st.info("No valid data to plot after cleaning.")
+    # Ensure metrics are numeric and present
+    if x_metric not in pool_sc.columns or y_metric not in pool_sc.columns:
+        st.info("Selected axis metrics are missing from the dataset.")
     else:
-        # --- Global styling (clean, legible, subtle) ---
-        mpl.rcParams.update({
-            "figure.dpi": 100,                 # pairs with figsize to hit 1280x720
-            "savefig.dpi": 200,
-            "font.size": 10.5,
-            "axes.titlesize": 14,
-            "axes.labelsize": 12,
-            "xtick.labelsize": 10,
-            "ytick.labelsize": 10,
-            "axes.edgecolor": "#9ca3af",
-            "axes.spines.right": False,
-            "axes.spines.top": False,
-            "axes.titleweight": "bold",
-            "axes.formatter.use_mathtext": True,
-            "text.antialiased": True,
-        })
+        pool_sc[x_metric] = pd.to_numeric(pool_sc[x_metric], errors="coerce")
+        pool_sc[y_metric] = pd.to_numeric(pool_sc[y_metric], errors="coerce")
+        pool_sc = pool_sc.dropna(subset=[x_metric, y_metric, "Player", "Team", "League"])
 
-        fig, ax = plt.subplots(figsize=(12.8, 7.2), dpi=100)  # 1280x720
-        fig.patch.set_facecolor("#f3f4f6")   # page
-        ax.set_facecolor("#f5f5f5")          # plot
+        # Selected player's name (regardless of inclusion toggle)
+        selected_player_name = player_row.iloc[0]["Player"] if not player_row.empty else None
 
-        # Axis limits with padding
-        x_vals = _df[x_metric].to_numpy(float)
-        y_vals = _df[y_metric].to_numpy(float)
+        # If excluded, make sure the selected player is NOT in the pool
+        if not include_selected and selected_player_name is not None and not pool_sc.empty:
+            pool_sc = pool_sc[pool_sc["Player"] != selected_player_name]
 
-        def padded_limits(arr, pad_frac=0.06):
-            a_min, a_max = float(np.nanmin(arr)), float(np.nanmax(arr))
-            if a_min == a_max:
-                a_min -= 1e-6; a_max += 1e-6
-            pad = (a_max - a_min) * pad_frac
-            return a_min - pad, a_max + pad
+        # If included, ensure we add them even if filtered out above
+        if include_selected and selected_player_name is not None:
+            need_insert = True
+            if not pool_sc.empty:
+                need_insert = not (pool_sc["Player"] == selected_player_name).any()
+            if need_insert:
+                insertable = df[df["Player"] == selected_player_name].head(1).copy()
+                if not insertable.empty:
+                    insertable["League Strength"] = insertable["League"].map(LEAGUE_STRENGTHS).fillna(0.0)
+                    insertable[x_metric] = pd.to_numeric(insertable[x_metric], errors="coerce")
+                    insertable[y_metric] = pd.to_numeric(insertable[y_metric], errors="coerce")
+                    pool_sc = pd.concat([pool_sc, insertable], ignore_index=True, sort=False)
 
-        xlim = padded_limits(x_vals); ylim = padded_limits(y_vals)
-        ax.set_xlim(*xlim); ax.set_ylim(*ylim)
+        # ==================== PLOT (PRO) ====================
+        import matplotlib as mpl
+        import matplotlib.pyplot as plt
+        from matplotlib import patheffects as pe
+        try:
+            from adjustText import adjust_text
+            _HAS_ADJUST = True
+        except Exception:
+            _HAS_ADJUST = False
 
-        # Selected player highlight
-        sel_name = selected_player_name if include_selected else None
-        others = _df[_df["Player"] != sel_name] if (sel_name is not None and "Player" in _df.columns) else _df
+        if pool_sc.empty:
+            st.info("No players in scatter pool after filters.")
+        else:
+            # --- Global styling (clean, legible, subtle) ---
+            mpl.rcParams.update({
+                "figure.dpi": 100,                 # pairs with figsize below to hit 1280x720
+                "savefig.dpi": 200,
+                "font.size": 10.5,
+                "axes.titlesize": 14,
+                "axes.labelsize": 12,
+                "xtick.labelsize": 10,
+                "ytick.labelsize": 10,
+                "axes.edgecolor": "#9ca3af",
+                "axes.spines.right": False,
+                "axes.spines.top": False,
+                "axes.titleweight": "bold",
+                "axes.formatter.use_mathtext": True,
+                "text.antialiased": True,
+            })
 
-        # Points
-        ax.scatter(
-            others[x_metric], others[y_metric],
-            s=32, c="#111827", alpha=float(point_alpha),
-            linewidths=0.4, edgecolors="white", zorder=2
-        )
+            fig_w, fig_h = 12.8, 7.2   # inches -> 1280x720 at 100 dpi
+            fig, ax = plt.subplots(figsize=(fig_w, fig_h), dpi=100)
 
-        texts = []
+            # Backgrounds from UI
+            fig.patch.set_facecolor(page_bg)
+            ax.set_facecolor(plot_bg)
 
-        # Selected player (if available)
-        if sel_name is not None and "Player" in _df.columns:
-            sel = _df[_df["Player"] == sel_name]
-            if not sel.empty:
+            # Data for limits
+            x_vals = pool_sc[x_metric].to_numpy(float)
+            y_vals = pool_sc[y_metric].to_numpy(float)
+
+            def padded_limits(arr, pad_frac=0.06):
+                a_min, a_max = float(np.nanmin(arr)), float(np.nanmax(arr))
+                if a_min == a_max:
+                    a_min -= 1e-6; a_max += 1e-6
+                pad = (a_max - a_min) * pad_frac
+                return a_min - pad, a_max + pad
+
+            xlim = padded_limits(x_vals); ylim = padded_limits(y_vals)
+            ax.set_xlim(*xlim); ax.set_ylim(*ylim)
+
+            # Colour logic
+            if st.session_state.get("sc_colour_by") == "League" and "League" in pool_sc.columns:
+                leagues_unique = sorted(pool_sc["League"].unique())
+                # Colourblind-safe palette rotation
+                palette = ["#1b9e77","#d95f02","#7570b3","#e7298a","#66a61e",
+                           "#e6ab02","#a6761d","#666666","#1f78b4","#b2df8a"]
+                colour_map = {lg: palette[i % len(palette)] for i, lg in enumerate(leagues_unique)}
+                point_colours = pool_sc["League"].map(colour_map).fillna(base_point_colour)
+            else:
+                point_colours = base_point_colour
+
+            # Selected player logic
+            sel_name = selected_player_name if include_selected else None
+            others = pool_sc[pool_sc["Player"] != sel_name] if sel_name is not None else pool_sc
+
+            # --- Draw points ---
+            ax.scatter(
+                others[x_metric], others[y_metric],
+                s=point_size, c=point_colours if isinstance(point_colours, (list, pd.Series)) else point_colours,
+                alpha=float(point_alpha), linewidths=0.4, edgecolors="white", marker=marker, zorder=2
+            )
+
+            texts = []
+            # Selected player highlighted
+            if sel_name is not None:
+                sel = pool_sc[pool_sc["Player"] == sel_name]
                 ax.scatter(
                     sel[x_metric], sel[y_metric],
-                    s=110, c="#C81E1E", edgecolors="white", linewidths=1.1, zorder=4
+                    s=max(90, point_size*2), c=selected_colour, edgecolors="white", linewidths=1.1, marker=marker, zorder=4
                 )
                 for _, r in sel.iterrows():
                     t = ax.text(
                         float(r[x_metric]), float(r[y_metric]),
-                        r.get("Player", "Selected"),
-                        fontsize=10.5, fontweight="bold", color="#C81E1E",
+                        r["Player"],
+                        fontsize=10.5, fontweight="bold", color=selected_colour,
                         zorder=5, ha="left", va="bottom"
                     )
-                    # halo for readability
+                    # Add halo for readability
                     t.set_path_effects([pe.withStroke(linewidth=2.5, foreground="white", alpha=0.9)])
                     texts.append(t)
 
-        # IQR shading
-        if shade_iqr:
-            x_q1, x_q3 = np.nanpercentile(x_vals, [25, 75])
-            y_q1, y_q3 = np.nanpercentile(y_vals, [25, 75])
-            ax.axvspan(x_q1, x_q3, color="#d1d5db", alpha=0.35, zorder=1)
-            ax.axhspan(y_q1, y_q3, color="#d1d5db", alpha=0.35, zorder=1)
+            # --- IQR shading ---
+            if shade_iqr:
+                x_q1, x_q3 = np.nanpercentile(x_vals, [25, 75])
+                y_q1, y_q3 = np.nanpercentile(y_vals, [25, 75])
+                ax.axvspan(x_q1, x_q3, color="#d1d5db", alpha=0.35, zorder=1)
+                ax.axhspan(y_q1, y_q3, color="#d1d5db", alpha=0.35, zorder=1)
 
-        # Medians
-        if show_medians:
-            med_x = float(np.nanmedian(x_vals)); med_y = float(np.nanmedian(y_vals))
-            ax.axvline(med_x, color="#6b7280", ls=(0,(5,4)), lw=1.2, zorder=1.5)
-            ax.axhline(med_y, color="#6b7280", ls=(0,(5,4)), lw=1.2, zorder=1.5)
-            ax.text(
-                med_x, ylim[1], " Median ",
-                ha="right", va="bottom", fontsize=9, color="#374151",
-                bbox=dict(facecolor="white", edgecolor="#9ca3af", boxstyle="round,pad=0.2", alpha=0.9),
-                zorder=3, clip_on=True
-            )
-            ax.text(
-                xlim[0], med_y, " Median ",
-                ha="left", va="top", fontsize=9, color="#374151",
-                bbox=dict(facecolor="white", edgecolor="#9ca3af", boxstyle="round,pad=0.2", alpha=0.9),
-                zorder=3, clip_on=True
-            )
-
-        # Labels for all points
-        if label_all and "Player" in _df.columns:
-            for _, r in others.iterrows():
-                t = ax.text(
-                    float(r[x_metric]), float(r[y_metric]),
-                    r["Player"], fontsize=9.2, color="#111827",
-                    ha="left", va="bottom", zorder=3
+            # --- Medians (with small badges) ---
+            if show_medians:
+                med_x = float(np.nanmedian(x_vals)); med_y = float(np.nanmedian(y_vals))
+                ax.axvline(med_x, color="#6b7280", ls=(0,(5,4)), lw=1.2, zorder=1.5)
+                ax.axhline(med_y, color="#6b7280", ls=(0,(5,4)), lw=1.2, zorder=1.5)
+                ax.text(
+                    med_x, ylim[1], " Median ",
+                    ha="right", va="bottom", fontsize=9, color="#374151",
+                    bbox=dict(facecolor="white", edgecolor="#9ca3af", boxstyle="round,pad=0.2", alpha=0.9),
+                    zorder=3, clip_on=True
                 )
-                t.set_path_effects([pe.withStroke(linewidth=2, foreground="white", alpha=0.9)])
-                texts.append(t)
+                ax.text(
+                    xlim[0], med_y, " Median ",
+                    ha="left", va="top", fontsize=9, color="#374151",
+                    bbox=dict(facecolor="white", edgecolor="#9ca3af", boxstyle="round,pad=0.2", alpha=0.9),
+                    zorder=3, clip_on=True
+                )
 
-            if not allow_overlap:
-                if _HAS_ADJUST:
-                    adjust_text(
-                        texts,
-                        ax=ax,
-                        only_move={"points": "y", "text": "xy"},
-                        autoalign=True,
-                        precision=0.01,
-                        lim=250,
-                        expand_text=(1.05, 1.15),
-                        expand_points=(1.05, 1.15),
-                        force_text=(0.05, 0.1),
-                        force_points=(0.05, 0.1),
-                        arrowprops=dict(arrowstyle="-", lw=0.6, color="#9ca3af", alpha=0.8)
+            # --- Labels for all points (with true overlap control) ---
+            if label_all:
+                for _, r in others.iterrows():
+                    t = ax.text(
+                        float(r[x_metric]), float(r[y_metric]),
+                        r["Player"], fontsize=9.2, color="#111827" if theme=="Light" else "#e5e7eb",
+                        ha="left", va="bottom", zorder=3
                     )
-                else:
-                    # simple fallback: vertical nudges if too close
-                    used = []
-                    xrad = (xlim[1] - xlim[0]) * 0.015
-                    yrad = (ylim[1] - ylim[0]) * 0.015
-                    for t in texts:
-                        x, y = t.get_position()
-                        while any(abs(x - ux) < xrad and abs(y - uy) < yrad for ux, uy in used):
-                            y += yrad * 0.9
-                        t.set_position((x, y))
-                        used.append((x, y))
+                    t.set_path_effects([pe.withStroke(linewidth=2, foreground="white", alpha=0.9)])
+                    texts.append(t)
 
-        # Axes, grid, spines, titles
-        ax.set_xlabel(x_metric, fontweight="bold")
-        ax.set_ylabel(y_metric, fontweight="bold")
-        ax.grid(True, which="major", linewidth=0.8, color="#e5e7eb")
-        ax.grid(True, which="minor", linewidth=0.5, color="#eceff1", alpha=0.8)
-        ax.minorticks_on()
-        for spine in ax.spines.values():
-            spine.set_linewidth(0.9)
+                if not allow_overlap:
+                    if _HAS_ADJUST:
+                        adjust_text(
+                            texts, ax=ax,
+                            only_move={"points":"y", "text":"xy"},
+                            autoalign=True, precision=0.01, lim=250,
+                            expand_text=(1.05,1.15), expand_points=(1.05,1.15),
+                            force_text=(0.05,0.1), force_points=(0.05,0.1),
+                            arrowprops=dict(arrowstyle="-", lw=0.6, color="#9ca3af", alpha=0.8)
+                        )
+                    else:
+                        used = []
+                        xrad = (xlim[1]-xlim[0]) * 0.015
+                        yrad = (ylim[1]-ylim[0]) * 0.015
+                        for t in texts:
+                            x, y = t.get_position()
+                            while any(abs(x-ux) < xrad and abs(y-uy) < yrad for ux,uy in used):
+                                y += yrad * 0.9
+                            t.set_position((x, y))
+                            used.append((x, y))
 
-        # Subtitle with pool info (safe if columns exist)
-        leagues_col = _df["League"] if "League" in _df.columns else pd.Series([], dtype=object)
-        leagues_shown = ", ".join(sorted(set(leagues_col))) if not leagues_col.empty else "—"
-        subtitle = f"Pool size: {len(_df):,} • Leagues: {leagues_shown}"
-        ax.set_title(f"{y_metric} vs {x_metric}", loc="left")
-        fig.text(0.011, 0.97, subtitle, fontsize=9.5, color="#4b5563")
+            # Styling: axis labels, grid, spines
+            ax.set_xlabel(x_metric, fontweight="bold")
+            ax.set_ylabel(y_metric, fontweight="bold")
+            ax.grid(True, which="major", linewidth=0.8, color=grid_major)
+            ax.grid(True, which="minor", linewidth=0.5, color=grid_minor, alpha=0.8)
+            ax.minorticks_on()
+            for spine in ax.spines.values():
+                spine.set_linewidth(0.9)
 
-        # Tight layout & render at fixed 1280×720
-        plt.tight_layout(rect=[0, 0, 1, 0.96])
-        st.pyplot(fig, use_container_width=False)
-# ===== End Scatter Plot =====
+            # Caption with pool size & leagues
+            leagues_shown = ", ".join(sorted(set(pool_sc["League"])))
+            subtitle = f"Pool size: {len(pool_sc):,} • Leagues: {leagues_shown}"
+            ax.set_title(f"{y_metric} vs {x_metric}", loc="left")
+            fig.text(0.011, 0.97, subtitle, fontsize=9.5, color="#4b5563" if theme=="Light" else "#cbd5e1")
+
+            # Tight layout to reduce clipping; Streamlit won’t stretch since we fix size
+            plt.tight_layout(rect=[0, 0, 1, 0.96])
+
+            # Render at fixed 1280x720 (don’t stretch to container)
+            st.pyplot(fig, use_container_width=False)
+except Exception as e:
+    st.info(f"Scatter could not be drawn: {e}")
+# ===========================================================================================================
 
 
 # ----------------- (B) COMPARISON RADAR — universal position_filter, A fixed, B any league -----------------
