@@ -211,7 +211,7 @@ with st.sidebar:
     # numeric coercions
     df["Minutes played"] = pd.to_numeric(df["Minutes played"], errors="coerce")
     df["Age"] = pd.to_numeric(df["Age"], errors="coerce")
-    min_minutes, max_minutes = st.slider("Minutes played", 0, 5000, (1000, 5000))
+    min_minutes, max_minutes = st.slider("Minutes played", 0, 5000, (500, 5000))
     age_min_data = int(np.nanmin(df["Age"])) if df["Age"].notna().any() else 14
     age_max_data = int(np.nanmax(df["Age"])) if df["Age"].notna().any() else 45
     min_age, max_age = st.slider("Age", age_min_data, age_max_data, (16, 40))
@@ -1839,7 +1839,7 @@ with st.expander("Scatter settings", expanded=False):
     # Filters: minutes, age, league strength (quality)
     df["Minutes played"] = pd.to_numeric(df["Minutes played"], errors="coerce")
     df["Age"] = pd.to_numeric(df["Age"], errors="coerce")
-    min_minutes_s, max_minutes_s = st.slider("Minutes filter", 0, 5000, (1000, 5000), key="sc_min")
+    min_minutes_s, max_minutes_s = st.slider("Minutes filter", 0, 5000, (500, 5000), key="sc_min")
     age_min_bound = int(np.nanmin(df["Age"])) if df["Age"].notna().any() else 14
     age_max_bound = int(np.nanmax(df["Age"])) if df["Age"].notna().any() else 45
     min_age_s, max_age_s = st.slider("Age filter", age_min_bound, age_max_bound, (16, 40), key="sc_age")
@@ -2277,7 +2277,7 @@ with st.expander("Similarity settings", expanded=False):
         st.caption(f"Preset: {sim_preset} — {len(preset_vals)} league(s). You can add/prune below.")
 
     # Base filters
-    sim_min_minutes, sim_max_minutes = st.slider("Minutes played (candidates)", 0, 5000, (1000, 5000), key="sim_min")
+    sim_min_minutes, sim_max_minutes = st.slider("Minutes played (candidates)", 0, 5000, (500, 5000), key="sim_min")
     sim_min_age, sim_max_age = st.slider("Age (candidates)", 14, 45, (16, 40), key="sim_age")
 
     # Optional league quality filter (0–101)
