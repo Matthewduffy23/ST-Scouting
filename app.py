@@ -1895,7 +1895,7 @@ try:
             mpl.rcParams.update({
                 "figure.dpi": 100,
                 "savefig.dpi": 220,
-                "font.size": 10.5,
+                "font.size": 12,
                 "axes.labelsize": 12,
                 "xtick.labelsize": 10,
                 "ytick.labelsize": 10,
@@ -1968,12 +1968,12 @@ try:
             if not sel.empty:
                 ax.scatter(
                     sel[x_metric], sel[y_metric],
-                    s=max(point_size*1.25, 100), c="#C81E1E", edgecolors="white",
+                    s=max(point_size*2.5, 100), c="#C81E1E", edgecolors="white",
                     linewidths=1.2, marker=marker, zorder=4
                 )
                 ax.scatter(
                     sel[x_metric], sel[y_metric],
-                    s=max(point_size*1.9, 140), facecolors="none", edgecolors="#22d3ee",
+                    s=max(point_size*2.5, 140), facecolors="none", edgecolors="#22d3ee",
                     linewidths=2.0, marker=marker, zorder=5
                 )
 
@@ -2004,7 +2004,7 @@ try:
                     tsel = ax.annotate(
                         sel.iloc[0]["Player"], (sx, sy),
                         xytext=(8, 10), textcoords="offset points",
-                        fontsize=label_size, fontweight="normal", color=txt_col,
+                        fontsize=label_size, fontweight="semibold", color=txt_col,
                         ha="left", va="bottom", zorder=6
                     )
                     tsel.set_path_effects([pe.withStroke(linewidth=2.0,
@@ -2020,7 +2020,7 @@ try:
                     t = ax.annotate(
                         r["Player"], (px, py),
                         xytext=(8, 10), textcoords="offset points",
-                        fontsize=label_size, fontweight="normal", color=txt_col,
+                        fontsize=label_size, fontweight="semibold", color=txt_col,
                         ha="left", va="bottom", zorder=4
                     )
                     t.set_path_effects([pe.withStroke(linewidth=2.0,
