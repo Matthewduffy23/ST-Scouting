@@ -1784,16 +1784,15 @@ else:
 
 
 
-# ============================== (A) SCATTERPLOT — Goals vs xG (Pro + Controls) ==============================
+# ============================== SCATTERPLOT (Pro, spec-compliant) ==============================
 st.markdown("---")
 st.header("📈 Scatterplot")
 
-# ---------- Settings UI ----------
 with st.expander("Scatter settings", expanded=False):
-    # Axis metric picks (defaults as requested)
     numeric_cols = df.select_dtypes(include="number").columns.tolist()
     x_default = "Non-penalty goals per 90"
     y_default = "xG per 90"
+
     x_metric = st.selectbox(
         "X-axis metric",
         [c for c in FEATURES if c in numeric_cols],
@@ -1807,7 +1806,7 @@ with st.expander("Scatter settings", expanded=False):
         key="sc_y",
     )
 
-    # Pool: default = player's league; presets + custom add-ons
+    # Pool selection
     leagues_available_sc = sorted(df["League"].dropna().unique().tolist())
     player_league = player_row.iloc[0]["League"] if not player_row.empty else None
 
@@ -1819,7 +1818,6 @@ with st.expander("Scatter settings", expanded=False):
         "Custom",
     ]
     preset_sc = st.selectbox("League preset", preset_choices_sc, index=0, key="sc_preset")
-
     preset_map_sc = {
         "Player's league": {player_league} if player_league else set(),
         "Top 5 Europe": set(PRESET_LEAGUES.get("Top 5 Europe", [])),
@@ -1827,50 +1825,54 @@ with st.expander("Scatter settings", expanded=False):
         "EFL (England 2–4)": set(PRESET_LEAGUES.get("EFL (England 2–4)", [])),
         "Custom": set(),
     }
-    preset_set = preset_map_sc.get(preset_sc, set())
     add_leagues_sc = st.multiselect("Add leagues", leagues_available_sc, default=[], key="sc_add_leagues")
-    leagues_scatter = sorted(set(add_leagues_sc) | preset_set)
-
-    # If user left it empty, fall back to player's league so the plot always works
+    leagues_scatter = sorted(preset_map_sc.get(preset_sc, set()) | set(add_leagues_sc))
     if not leagues_scatter and player_league:
         leagues_scatter = [player_league]
 
     same_pos_scatter = st.checkbox("Limit pool to current position prefix", value=True, key="sc_pos")
 
-    # Filters: minutes, age, league strength (quality)
+    # Filters
     df["Minutes played"] = pd.to_numeric(df["Minutes played"], errors="coerce")
     df["Age"] = pd.to_numeric(df["Age"], errors="coerce")
     min_minutes_s, max_minutes_s = st.slider("Minutes filter", 0, 5000, (500, 5000), key="sc_min")
     age_min_bound = int(np.nanmin(df["Age"])) if df["Age"].notna().any() else 14
     age_max_bound = int(np.nanmax(df["Age"])) if df["Age"].notna().any() else 45
     min_age_s, max_age_s = st.slider("Age filter", age_min_bound, age_max_bound, (16, 40), key="sc_age")
-
     min_strength_s, max_strength_s = st.slider("League quality (strength)", 0, 101, (0, 101), key="sc_ls")
 
-    # Label & inclusion toggles
-    include_selected = st.toggle("Include selected player", value=True, key="sc_include")
-    label_all = st.toggle("Label ALL players in chart", value=False, key="sc_labels_all")
-    allow_overlap = st.toggle("Allow overlapping labels", value=False, key="sc_overlap")
+    # Labelling
+    show_labels   = st.toggle("Show player labels", value=True, key="sc_labels_all")
+    allow_overlap = st.toggle("Allow overlapping labels", value=False, key="sc_overlap")  # default NO overlap
 
-    # Visual improvements
+    # Visuals
     show_medians = st.checkbox("Show median reference lines", value=True, key="sc_medians")
-    shade_iqr = st.checkbox("Shade interquartile range (25–75%)", value=True, key="sc_iqr")
+    shade_iqr    = st.checkbox("Shade interquartile range (25–75%)", value=True, key="sc_iqr")
 
-    # Point/marker controls
-    point_alpha = st.slider("Point opacity", 0.2, 1.0, 0.85, 0.05, key="sc_alpha")
-    point_size  = st.slider("Point size", 10, 140, 32, 2, key="sc_pts")
-    marker      = st.selectbox("Marker", ["o", "x", "s", "^", "D"], index=0, key="sc_marker")
+    # Points
+    point_alpha = st.slider("Point opacity", 0.2, 1.0, 0.90, 0.05, key="sc_alpha")
+    point_size  = st.slider("Point size", 20, 160, 48, 2, key="sc_pts")  # bigger & darker by default
+    marker      = st.selectbox("Marker", ["o", "s", "^", "D"], index=0, key="sc_marker")
 
-    # -------- Colours & Theme --------
-    with st.expander("🎨 Colours & Theme", expanded=False):
-        theme = st.radio("Theme preset", ["Light", "Dark"], index=0, horizontal=True, key="sc_theme")
-        colour_by = st.selectbox("Colour points by", ["Single colour", "League"], index=0, key="sc_colour_by")
-        base_point_colour = st.color_picker("Point colour", value="#111827", key="sc_col_point")
-        selected_colour   = st.color_picker("Selected player colour", value="#C81E1E", key="sc_col_sel")
-        page_bg   = st.color_picker("Page background", "#f3f4f6" if theme=="Light" else "#0f1116", key="sc_col_page")
-        plot_bg   = st.color_picker("Plot background", "#f5f5f5" if theme=="Light" else "#20252e", key="sc_col_plot")
-        grid_major = st.color_picker("Grid (major)", "#e5e7eb" if theme=="Light" else "#3a4050", key="sc_col_gmaj")
-        grid_minor = st.color_picker("Grid (minor)", "#eceff1" if theme=="Light" else "#2c3241", key="sc_col_gmin")
+    # Theme
+    theme = st.radio("Theme", ["Light", "Dark"], index=0, horizontal=True, key="sc_theme")
+    PAGE_BG = "#ebebeb" if theme == "Light" else "#0a0f1c"
+    PLOT_BG = "#f3f3f3" if theme == "Light" else "#0f151f"
+    GRID_MAJ = "#d7d7d7" if theme == "Light" else "#3a4050"
+    GRID_MIN = "#e7e7e7" if theme == "Light" else "#2c3241"
+    base_point_colour = "#0f172a"  # darker default
+
+    # ----- Colour by metric -----
+    st.markdown("**Colour the dots by…**")
+    colour_metric = st.selectbox(
+        "Metric for colour scale",
+        [c for c in FEATURES if c in numeric_cols],
+        index=(FEATURES.index(x_metric) if x_metric in FEATURES else 0),
+        key="sc_colour_metric",
+        help="Colours are scaled within the current pool.",
+    )
+    palette_choice = st.radio("Palette", ["Red–Gold–Green (diverging)", "Black Monochrome"], index=0, horizontal=False, key="sc_palette")
+    reverse_scale  = st.checkbox("Reverse colours", value=False, key="sc_reverse")
 
 # ---- Build scatter pool ----
 try:
@@ -1891,38 +1893,34 @@ try:
         & (pool_sc["League Strength"] <= float(max_strength_s))
     ]
 
-    # Ensure metrics are numeric and present
-    if x_metric not in pool_sc.columns or y_metric not in pool_sc.columns:
-        st.info("Selected axis metrics are missing from the dataset.")
+    # Ensure metrics exist
+    if x_metric not in pool_sc.columns or y_metric not in pool_sc.columns or colour_metric not in pool_sc.columns:
+        st.info("Selected axis/colour metrics are missing from the dataset.")
     else:
         pool_sc[x_metric] = pd.to_numeric(pool_sc[x_metric], errors="coerce")
         pool_sc[y_metric] = pd.to_numeric(pool_sc[y_metric], errors="coerce")
-        pool_sc = pool_sc.dropna(subset=[x_metric, y_metric, "Player", "Team", "League"])
+        pool_sc[colour_metric] = pd.to_numeric(pool_sc[colour_metric], errors="coerce")
+        pool_sc = pool_sc.dropna(subset=[x_metric, y_metric, colour_metric, "Player", "Team", "League"])
 
-        # Selected player's name (regardless of inclusion toggle)
+        # Selected player name
         selected_player_name = player_row.iloc[0]["Player"] if not player_row.empty else None
 
-        # If excluded, make sure the selected player is NOT in the pool
-        if not include_selected and selected_player_name is not None and not pool_sc.empty:
-            pool_sc = pool_sc[pool_sc["Player"] != selected_player_name]
-
-        # If included, ensure we add them even if filtered out above
+        # Include selected
+        include_selected = True
         if include_selected and selected_player_name is not None:
-            need_insert = True
-            if not pool_sc.empty:
-                need_insert = not (pool_sc["Player"] == selected_player_name).any()
-            if need_insert:
+            if not (pool_sc["Player"] == selected_player_name).any():
                 insertable = df[df["Player"] == selected_player_name].head(1).copy()
                 if not insertable.empty:
+                    for m in [x_metric, y_metric, colour_metric]:
+                        insertable[m] = pd.to_numeric(insertable[m], errors="coerce")
                     insertable["League Strength"] = insertable["League"].map(LEAGUE_STRENGTHS).fillna(0.0)
-                    insertable[x_metric] = pd.to_numeric(insertable[x_metric], errors="coerce")
-                    insertable[y_metric] = pd.to_numeric(insertable[y_metric], errors="coerce")
                     pool_sc = pd.concat([pool_sc, insertable], ignore_index=True, sort=False)
 
-        # ==================== PLOT (PRO) ====================
+        # ==================== PLOT ====================
         import matplotlib as mpl
         import matplotlib.pyplot as plt
         from matplotlib import patheffects as pe
+        import numpy as np
         try:
             from adjustText import adjust_text
             _HAS_ADJUST = True
@@ -1932,165 +1930,196 @@ try:
         if pool_sc.empty:
             st.info("No players in scatter pool after filters.")
         else:
-            # --- Global styling (clean, legible, subtle) ---
             mpl.rcParams.update({
-                "figure.dpi": 100,                 # pairs with figsize below to hit 1280x720
-                "savefig.dpi": 200,
-                "font.size": 10.5,
-                "axes.titlesize": 14,
+                "figure.dpi": 100,
+                "savefig.dpi": 220,
+                "font.size": 11,
                 "axes.labelsize": 12,
                 "xtick.labelsize": 10,
                 "ytick.labelsize": 10,
                 "axes.edgecolor": "#9ca3af",
                 "axes.spines.right": False,
                 "axes.spines.top": False,
-                "axes.titleweight": "bold",
                 "axes.formatter.use_mathtext": True,
                 "text.antialiased": True,
             })
 
-            fig_w, fig_h = 12.8, 7.2   # inches -> 1280x720 at 100 dpi
-            fig, ax = plt.subplots(figsize=(fig_w, fig_h), dpi=100)
+            fig, ax = plt.subplots(figsize=(12.8, 7.2), dpi=100)  # 1280x720
+            fig.patch.set_facecolor(PAGE_BG)
+            ax.set_facecolor(PLOT_BG)
 
-            # Backgrounds from UI
-            fig.patch.set_facecolor(page_bg)
-            ax.set_facecolor(plot_bg)
-
-            # Data for limits
+            # Limits with padding
             x_vals = pool_sc[x_metric].to_numpy(float)
             y_vals = pool_sc[y_metric].to_numpy(float)
-
             def padded_limits(arr, pad_frac=0.06):
                 a_min, a_max = float(np.nanmin(arr)), float(np.nanmax(arr))
                 if a_min == a_max:
                     a_min -= 1e-6; a_max += 1e-6
                 pad = (a_max - a_min) * pad_frac
                 return a_min - pad, a_max + pad
-
             xlim = padded_limits(x_vals); ylim = padded_limits(y_vals)
             ax.set_xlim(*xlim); ax.set_ylim(*ylim)
 
-            # Colour logic
-            if st.session_state.get("sc_colour_by") == "League" and "League" in pool_sc.columns:
-                leagues_unique = sorted(pool_sc["League"].unique())
-                # Colourblind-safe palette rotation
-                palette = ["#1b9e77","#d95f02","#7570b3","#e7298a","#66a61e",
-                           "#e6ab02","#a6761d","#666666","#1f78b4","#b2df8a"]
-                colour_map = {lg: palette[i % len(palette)] for i, lg in enumerate(leagues_unique)}
-                point_colours = pool_sc["League"].map(colour_map).fillna(base_point_colour)
+            # ----- Colour scaling (within pool) -----
+            cvals = pool_sc[colour_metric].to_numpy(float)
+            cmin, cmax = float(np.nanmin(cvals)), float(np.nanmax(cvals))
+            if cmin == cmax:
+                cmax = cmin + 1e-6
+            t = (cvals - cmin) / (cmax - cmin)
+            if reverse_scale:
+                t = 1.0 - t
+
+            # Palettes
+            if palette_choice.startswith("Red–Gold–Green"):
+                # #C7363C → #F0C56A → #3DA65B
+                def ramp_rg(tval):
+                    import numpy as _np
+                    red   = _np.array([199,  54,  60], dtype=float)
+                    gold  = _np.array([240, 197, 106], dtype=float)
+                    green = _np.array([ 61, 166,  91], dtype=float)
+                    if tval <= 0.5:
+                        a, b, u = red, gold, tval/0.5
+                    else:
+                        a, b, u = gold, green, (tval-0.5)/0.5
+                    c = a + (b - a) * np.clip(u, 0, 1)
+                    return (c/255.0)
+                colors = [ramp_rg(v) for v in t]
             else:
-                point_colours = base_point_colour
+                # Black → dark charcoal
+                def ramp_bw(tval):
+                    lo = np.array([25, 25, 30], dtype=float)   # near-black
+                    hi = np.array([90, 90,100], dtype=float)   # dark gray
+                    c  = lo + (hi - lo) * np.clip(tval, 0, 1)
+                    return (c/255.0)
+                colors = [ramp_bw(v) for v in t]
 
             # Selected player logic
-            sel_name = selected_player_name if include_selected else None
+            sel_name = selected_player_name
             others = pool_sc[pool_sc["Player"] != sel_name] if sel_name is not None else pool_sc
 
-            # --- Draw points ---
+            # Draw points (darker, bigger)
             ax.scatter(
                 others[x_metric], others[y_metric],
-                s=point_size, c=point_colours if isinstance(point_colours, (list, pd.Series)) else point_colours,
-                alpha=float(point_alpha), linewidths=0.4, edgecolors="white", marker=marker, zorder=2
+                s=point_size, c=np.array(colors)[others.index] if len(colors) == len(pool_sc) else base_point_colour,
+                alpha=float(point_alpha), linewidths=0.6, edgecolors="white", marker=marker, zorder=2
             )
 
             texts = []
-            # Selected player highlighted
+            # Selected player highlight (ring + label)
             if sel_name is not None:
                 sel = pool_sc[pool_sc["Player"] == sel_name]
-                ax.scatter(
-                    sel[x_metric], sel[y_metric],
-                    s=max(90, point_size*2), c=selected_colour, edgecolors="white", linewidths=1.1, marker=marker, zorder=4
-                )
-                for _, r in sel.iterrows():
-                    t = ax.text(
-                        float(r[x_metric]), float(r[y_metric]),
-                        r["Player"],
-                        fontsize=10.5, fontweight="bold", color=selected_colour,
-                        zorder=5, ha="left", va="bottom"
+                if not sel.empty:
+                    ax.scatter(
+                        sel[x_metric], sel[y_metric],
+                        s=max(point_size*2, 110), facecolors="none",
+                        edgecolors="#22d3ee", linewidths=2.2, marker=marker, zorder=5
                     )
-                    # Add halo for readability
-                    t.set_path_effects([pe.withStroke(linewidth=2.5, foreground="white", alpha=0.9)])
-                    texts.append(t)
+                    for _, r in sel.iterrows():
+                        tsel = ax.text(
+                            float(r[x_metric]), float(r[y_metric]),
+                            r["Player"],
+                            fontsize=18, fontweight="semibold", color=("#0f172a" if theme=="Light" else "#e5e7eb"),
+                            zorder=6, ha="left", va="bottom"
+                        )
+                        tsel.set_path_effects([pe.withStroke(linewidth=3.0, foreground="white", alpha=0.95)])
+                        texts.append(tsel)
 
-            # --- IQR shading ---
+            # IQR shading
             if shade_iqr:
                 x_q1, x_q3 = np.nanpercentile(x_vals, [25, 75])
                 y_q1, y_q3 = np.nanpercentile(y_vals, [25, 75])
-                ax.axvspan(x_q1, x_q3, color="#d1d5db", alpha=0.35, zorder=1)
-                ax.axhspan(y_q1, y_q3, color="#d1d5db", alpha=0.35, zorder=1)
+                ax.axvspan(x_q1, x_q3, color="#9aa4b1" if theme=="Dark" else "#d1d5db", alpha=0.28, zorder=1)
+                ax.axhspan(y_q1, y_q3, color="#9aa4b1" if theme=="Dark" else "#d1d5db", alpha=0.28, zorder=1)
 
-            # --- Medians (with small badges) ---
+            # Medians
             if show_medians:
                 med_x = float(np.nanmedian(x_vals)); med_y = float(np.nanmedian(y_vals))
-                ax.axvline(med_x, color="#6b7280", ls=(0,(5,4)), lw=1.2, zorder=1.5)
-                ax.axhline(med_y, color="#6b7280", ls=(0,(5,4)), lw=1.2, zorder=1.5)
-                ax.text(
-                    med_x, ylim[1], " Median ",
-                    ha="right", va="bottom", fontsize=9, color="#374151",
-                    bbox=dict(facecolor="white", edgecolor="#9ca3af", boxstyle="round,pad=0.2", alpha=0.9),
-                    zorder=3, clip_on=True
-                )
-                ax.text(
-                    xlim[0], med_y, " Median ",
-                    ha="left", va="top", fontsize=9, color="#374151",
-                    bbox=dict(facecolor="white", edgecolor="#9ca3af", boxstyle="round,pad=0.2", alpha=0.9),
-                    zorder=3, clip_on=True
-                )
+                ax.axvline(med_x, color="#6b7280", ls=(0,(5,4)), lw=1.25, zorder=3)
+                ax.axhline(med_y, color="#6b7280", ls=(0,(5,4)), lw=1.25, zorder=3)
 
-            # --- Labels for all points (with true overlap control) ---
-            if label_all:
+            # Labels
+            if show_labels:
                 for _, r in others.iterrows():
-                    t = ax.text(
+                    tt = ax.text(
                         float(r[x_metric]), float(r[y_metric]),
-                        r["Player"], fontsize=9.2, color="#111827" if theme=="Light" else "#e5e7eb",
-                        ha="left", va="bottom", zorder=3
+                        r["Player"],
+                        fontsize=18, fontweight="semibold",
+                        color=("#0f172a" if theme=="Light" else "#e5e7eb"),
+                        ha="left", va="bottom", zorder=4
                     )
-                    t.set_path_effects([pe.withStroke(linewidth=2, foreground="white", alpha=0.9)])
-                    texts.append(t)
+                    tt.set_path_effects([pe.withStroke(linewidth=3.0, foreground="white", alpha=0.95)])
+                    texts.append(tt)
 
+                # NO OVERLAP by default
                 if not allow_overlap:
                     if _HAS_ADJUST:
                         adjust_text(
                             texts, ax=ax,
-                            only_move={"points":"y", "text":"xy"},
-                            autoalign=True, precision=0.01, lim=250,
-                            expand_text=(1.05,1.15), expand_points=(1.05,1.15),
-                            force_text=(0.05,0.1), force_points=(0.05,0.1),
-                            arrowprops=dict(arrowstyle="-", lw=0.6, color="#9ca3af", alpha=0.8)
+                            only_move={"points": "y", "text": "xy"},
+                            autoalign=True, precision=0.001, lim=300,
+                            expand_text=(1.2, 1.25), expand_points=(1.15, 1.25),
+                            force_text=(0.2, 0.25), force_points=(0.2, 0.25),
+                            arrowprops=dict(arrowstyle="-", lw=0.6, color="#94a3b8", alpha=0.8)
                         )
                     else:
+                        # robust fallback: iterative vertical nudging
                         used = []
-                        xrad = (xlim[1]-xlim[0]) * 0.015
-                        yrad = (ylim[1]-ylim[0]) * 0.015
-                        for t in texts:
-                            x, y = t.get_position()
-                            while any(abs(x-ux) < xrad and abs(y-uy) < yrad for ux,uy in used):
-                                y += yrad * 0.9
-                            t.set_position((x, y))
-                            used.append((x, y))
+                        xrad = (xlim[1]-xlim[0]) * 0.012
+                        yrad = (ylim[1]-ylim[0]) * 0.012
+                        for _ in range(3):
+                            moved = False
+                            new_used = []
+                            for t in texts:
+                                x, y = t.get_position()
+                                while any(abs(x-ux) < xrad and abs(y-uy) < yrad for ux,uy in used):
+                                    y += yrad * 0.9; moved = True
+                                t.set_position((x, y)); new_used.append((x, y))
+                            used = new_used
+                            if not moved: break
 
-            # Styling: axis labels, grid, spines
-            ax.set_xlabel(x_metric, fontweight="bold")
-            ax.set_ylabel(y_metric, fontweight="bold")
-            ax.grid(True, which="major", linewidth=0.8, color=grid_major)
-            ax.grid(True, which="minor", linewidth=0.5, color=grid_minor, alpha=0.8)
+            # Axes & grid
+            ax.set_xlabel(x_metric, fontweight="bold", color=("#111" if theme=="Light" else "#e5e7eb"))
+            ax.set_ylabel(y_metric, fontweight="bold", color=("#111" if theme=="Light" else "#e5e7eb"))
+            ax.tick_params(colors=("#111" if theme=="Light" else "#e5e7eb"))
+            ax.grid(True, which="major", linewidth=0.9, color=GRID_MAJ)
+            ax.grid(True, which="minor", linewidth=0.55, color=GRID_MIN, alpha=0.85)
             ax.minorticks_on()
-            for spine in ax.spines.values():
-                spine.set_linewidth(0.9)
+            for s in ax.spines.values():
+                s.set_linewidth(0.9)
+                s.set_color("#9ca3af" if theme=="Light" else "#6b7280")
 
-            # Caption with pool size & leagues
-            leagues_shown = ", ".join(sorted(set(pool_sc["League"])))
-            subtitle = f"Pool size: {len(pool_sc):,} • Leagues: {leagues_shown}"
-            ax.set_title(f"{y_metric} vs {x_metric}", loc="left")
-            fig.text(0.011, 0.97, subtitle, fontsize=9.5, color="#4b5563" if theme=="Light" else "#cbd5e1")
+            # Colorbar (for the colour metric)
+            import matplotlib as _mpl
+            from matplotlib.colors import LinearSegmentedColormap
+            if palette_choice.startswith("Red–Gold–Green"):
+                # build cmap that matches dots
+                cdict = {
+                    "red":   ((0.0, 199/255, 199/255), (0.5, 240/255, 240/255), (1.0,  61/255,  61/255)),
+                    "green": ((0.0,  54/255,  54/255), (0.5, 197/255, 197/255), (1.0, 166/255, 166/255)),
+                    "blue":  ((0.0,  60/255,  60/255), (0.5, 106/255, 106/255), (1.0,  91/255,  91/255)),
+                }
+                cmap = LinearSegmentedColormap("rg", cdict)
+            else:
+                cmap = LinearSegmentedColormap.from_list("bw", [(25/255,25/255,30/255),(90/255,90/255,100/255)])
 
-            # Tight layout to reduce clipping; Streamlit won’t stretch since we fix size
-            plt.tight_layout(rect=[0, 0, 1, 0.96])
+            if reverse_scale:
+                cmap = cmap.reversed()
 
-            # Render at fixed 1280x720 (don’t stretch to container)
+            norm = _mpl.colors.Normalize(vmin=cmin, vmax=cmax)
+            cax = fig.add_axes([0.86, 0.16, 0.02, 0.68])  # side bar
+            cb = _mpl.colorbar.ColorbarBase(cax, cmap=cmap, norm=norm, orientation='vertical')
+            cb.set_label(colour_metric, color=("#111" if theme=="Light" else "#e5e7eb"))
+            cb.ax.yaxis.set_tick_params(color=("#111" if theme=="Light" else "#e5e7eb"))
+            plt.setp(plt.getp(cb.ax.axes, 'yticklabels'), color=("#111" if theme=="Light" else "#e5e7eb"))
+
+            # No title / header text (per spec)
+
+            plt.tight_layout(rect=[0.04, 0.04, 0.84, 0.98])  # leave room for colorbar
             st.pyplot(fig, use_container_width=False)
 except Exception as e:
     st.info(f"Scatter could not be drawn: {e}")
-# ===========================================================================================================
+# ==============================================================================================
+
 
 
 # ----------------- (B) COMPARISON RADAR — universal position_filter, A fixed, B any league -----------------
