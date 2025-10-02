@@ -1566,7 +1566,7 @@ else:
 # ============================ END — Feature F ============================
 
 
-# ============================ (Z) THREE-PANEL PERCENTILE BOARD — light theme + header images + height + custom footer ============================
+# ============================ (Z) THREE-PANEL PERCENTILE BOARD — bigger chart + roomy header + rectangular images ============================
 from io import BytesIO
 import uuid
 import numpy as np
@@ -1574,7 +1574,6 @@ import matplotlib.pyplot as plt
 from matplotlib.transforms import ScaledTranslation
 from matplotlib import font_manager as fm
 from matplotlib.font_manager import FontProperties
-from matplotlib.patches import Circle
 from PIL import Image
 import streamlit as st
 
@@ -1584,11 +1583,9 @@ st.header("📋 Feature Z — White Percentile Board")
 # ---------- controls ----------
 with st.expander("Feature Z options", expanded=False):
     show_height = st.checkbox("Show height in info row", value=True, help="Adds Height next to Foot.")
-    # Try to read a height-like field if it exists; you can overwrite below
     default_height = ""
     try:
         if not player_row.empty:
-            # Try common column names
             for col in ["Height", "Height (ft)", "Height ft", "Height (cm)"]:
                 if col in player_row.columns and str(player_row.iloc[0][col]).strip():
                     default_height = str(player_row.iloc[0][col]).strip()
@@ -1596,7 +1593,6 @@ with st.expander("Feature Z options", expanded=False):
     except Exception:
         pass
     height_text = st.text_input("Height value (e.g., 6'2\")", default_height)
-
     footer_caption_text = st.text_input("Footer caption", "Percentile Rank")
 
     st.caption("Top-right images (optional). Recommended transparent PNGs.")
@@ -1623,20 +1619,20 @@ def _font_name_or_fallback(pref_names, fallback="DejaVu Sans"):
             return n
     return fallback
 
-# --- fonts (Tableau-like families + explicit hierarchy) ---
+# --- fonts ---
 FONT_TITLE_FAMILY = _font_name_or_fallback(["Tableau Bold", "Tableau Sans Bold", "Tableau"])
 FONT_BOOK_FAMILY  = _font_name_or_fallback(["Tableau Book", "Tableau Sans", "Tableau"])
 
-TITLE_FP     = FontProperties(family=FONT_TITLE_FAMILY, weight='bold',     size=22)  # Player Name | Team
-H2_FP        = FontProperties(family=FONT_TITLE_FAMILY, weight='semibold', size=20)  # Section titles
-LABEL_FP     = FontProperties(family=FONT_BOOK_FAMILY,  weight='medium',   size=10)  # Metric labels (left gutter)
+TITLE_FP     = FontProperties(family=FONT_TITLE_FAMILY, weight='bold',     size=24)  # larger
+H2_FP        = FontProperties(family=FONT_TITLE_FAMILY, weight='semibold', size=20)
+LABEL_FP     = FontProperties(family=FONT_BOOK_FAMILY,  weight='medium',   size=10)
 
-INFO_LABEL_FP = FontProperties(family=FONT_BOOK_FAMILY, weight='bold',     size=10)  # "Age:"
-INFO_VALUE_FP = FontProperties(family=FONT_BOOK_FAMILY, weight='regular',  size=10)  # "31"
+INFO_LABEL_FP = FontProperties(family=FONT_BOOK_FAMILY, weight='bold',     size=10)
+INFO_VALUE_FP = FontProperties(family=FONT_BOOK_FAMILY, weight='regular',  size=10)
 
-BAR_VALUE_FP = FontProperties(family=FONT_BOOK_FAMILY, weight='regular',   size=8)   # numbers inside bars
-TICK_FP      = FontProperties(family=FONT_BOOK_FAMILY, weight='medium',    size=10)  # bottom tick numbers
-FOOTER_FP    = FontProperties(family=FONT_BOOK_FAMILY, weight='semibold',  size=10)  # footer caption
+BAR_VALUE_FP = FontProperties(family=FONT_BOOK_FAMILY, weight='regular',   size=8)
+TICK_FP      = FontProperties(family=FONT_BOOK_FAMILY, weight='medium',    size=10)
+FOOTER_FP    = FontProperties(family=FONT_BOOK_FAMILY, weight='semibold',  size=10)
 
 if player_row.empty:
     st.info("Pick a player above.")
@@ -1646,18 +1642,13 @@ else:
     name    = _safe_get(player_row, "Player", _safe_get(player_row, "Name", "Kadeem Harris"))
     team    = _safe_get(player_row, "Team", "Carlisle United")
 
-    # Age as whole number
     age_raw = _safe_get(player_row, "Age", "31.0")
-    try:
-        age = f"{float(age_raw):.0f}"
-    except Exception:
-        age = age_raw
+    try:    age = f"{float(age_raw):.0f}"
+    except: age = age_raw
 
-    # Use 'Matches played' for games, with robust fallbacks
     games = _safe_get(player_row, "Matches played",
              _safe_get(player_row, "Games",
              _safe_get(player_row, "Apps", "—")))
-    # Minutes (keep your existing fallback)
     minutes = _safe_get(player_row, "Minutes",
                _safe_get(player_row, "Minutes played", "—"))
 
@@ -1719,9 +1710,9 @@ else:
     LABEL_C = "#222222"
     DIVIDER = "#000000"
 
-    TAB_RED   = np.array([199, 54,  60], dtype=float)
+    TAB_RED   = np.array([199, 54, 60], dtype=float)
     TAB_GOLD  = np.array([240, 197, 106], dtype=float)
-    TAB_GREEN = np.array([ 61, 166,  91], dtype=float)
+    TAB_GREEN = np.array([61, 166, 91], dtype=float)
 
     def _blend(c1, c2, t):
         c = c1 + (c2 - c1) * np.clip(t, 0.0, 1.0)
@@ -1731,43 +1722,43 @@ else:
         v = float(np.clip(v, 0, 100))
         return _blend(TAB_RED, TAB_GOLD, v/50.0) if v <= 50 else _blend(TAB_GOLD, TAB_GREEN, (v-50.0)/50.0)
 
-    # ----- layout (unified left alignment) -----
-    GLOBAL_LEFT_PAD = 0.02         # 2% extra left padding for EVERYTHING
+    # ----- layout (bigger figure + taller title band) -----
+    GLOBAL_LEFT_PAD = 0.02
     BASE_LEFT, RIGHT = 0.035, 0.020
     LEFT = BASE_LEFT + GLOBAL_LEFT_PAD
 
-    # Optical nudge ONLY for the bold title (compensates font side-bearing)
-    TITLE_LEFT_NUDGE = -0.001      # tweak if needed
+    TITLE_LEFT_NUDGE = -0.001
 
     TOP, BOT = 0.035, 0.07
     header_h, GAP = 0.06, 0.020
 
-    title_row_h     = 0.075
-    header_block_h  = title_row_h + 0.020
+    # ↑↑ Bigger title band to create space ABOVE the info line
+    title_row_h     = 0.12   # was 0.075
+    header_block_h  = title_row_h + 0.030  # extra breathing room
 
     total_rows = sum(len(lst) for _, lst in sections)
-    fig = plt.figure(figsize=(10, 8), dpi=100)
+
+    # ↑↑ Bigger canvas
+    fig = plt.figure(figsize=(11.8, 9.6), dpi=120)
     fig.patch.set_facecolor(PAGE_BG)
 
     rows_space_total = 1 - (TOP + BOT) - header_block_h - header_h * len(sections) - GAP * (len(sections) - 1)
     row_slot = rows_space_total / max(total_rows, 1)
     BAR_FRAC = 0.85
 
-    # Width reserved for metric labels before bars begin
     gutter = 0.215
-
     ticks = np.arange(0, 101, 10)
-    x_center_plot = (LEFT + gutter + (1 - RIGHT)) / 2.0
 
-    # ===== HEADER (title + info share LEFT; title gets optical nudge) =====
+    # ===== HEADER =====
     title_x = LEFT + TITLE_LEFT_NUDGE
-    y_title_top = 1 - TOP - 0.006
+    y_title_top = 1 - TOP - 0.010
     fig.text(title_x, y_title_top, f"{name}\u2009|\u2009{team}",
              ha="left", va="top", color=TITLE_C, fontproperties=TITLE_FP)
 
     def draw_info_pairs():
-        y = 1 - TOP - title_row_h + 0.010
-        x = LEFT  # exact left alignment baseline (no nudge)
+        # Push info row down inside the expanded title band
+        y = 1 - TOP - (title_row_h * 0.50)
+        x = LEFT
         pairs = [
             ("Position: ", pos),
             ("Age: ",      age),
@@ -1797,28 +1788,7 @@ else:
                 x += (bb3.width / fig.bbox.width)
     draw_info_pairs()
 
-    # ===== Top-right images (round badges) =====
-    def add_round_image(pil_img, right_index=0, diameter=0.085, gap=0.012, border_color="#ffffff", border_width=2):
-        """
-        right_index: 0 -> rightmost, 1 -> next left, etc.
-        diameter: width/height of the circular badge in figure coords
-        """
-        if pil_img is None:
-            return
-        # Compute figure coordinates
-        x_right_edge = 1 - RIGHT
-        x = x_right_edge - (right_index + 1) * diameter - right_index * gap
-        y = 1 - TOP - diameter + 0.006  # vertically within title band
-        ax_img = fig.add_axes([x, y, diameter, diameter])
-        ax_img.imshow(pil_img)
-        ax_img.axis("off")
-        # Circular clip
-        circ = Circle((0.5, 0.5), 0.5, transform=ax_img.transAxes, fill=False)
-        ax_img.set_clip_path(circ)
-        # Border ring
-        ax_img.add_patch(Circle((0.5, 0.5), 0.5, transform=ax_img.transAxes,
-                                fill=False, ec=border_color, lw=border_width, zorder=3))
-
+    # ===== Top-right images — rectangular, same size, snug together =====
     def _open_upload(u):
         if u is None:
             return None
@@ -1827,26 +1797,42 @@ else:
         except Exception:
             return None
 
-    # Rightmost first, then move left
-    add_round_image(_open_upload(up_img1), right_index=0)
-    add_round_image(_open_upload(up_img2), right_index=1)
-    add_round_image(_open_upload(up_img3), right_index=2)
+    def add_header_image(pil_img, right_index=0, box_w=0.10, box_h=0.10, gap=0.012):
+        """
+        Places a rectangular image inside the title band, top-right.
+        - right_index: 0 = rightmost, 1 = next left, etc.
+        - box_w / box_h: fixed size so all badges look consistent.
+        - No circular clip, no border.
+        """
+        if pil_img is None:
+            return
+        x_right_edge = 1 - RIGHT
+        x = x_right_edge - (right_index + 1) * box_w - right_index * gap
+        # vertically centered within the title band (above info line)
+        y_band_top = 1 - TOP - 0.005
+        y = y_band_top - box_h
+        ax_img = fig.add_axes([x, y, box_w, box_h])
+        ax_img.imshow(pil_img)
+        ax_img.axis("off")
+
+    # Use a slightly larger, uniform size; they’ll sit close to each other
+    add_header_image(_open_upload(up_img1), right_index=0, box_w=0.11, box_h=0.11, gap=0.010)
+    add_header_image(_open_upload(up_img2), right_index=1, box_w=0.11, box_h=0.11, gap=0.010)
+    add_header_image(_open_upload(up_img3), right_index=2, box_w=0.11, box_h=0.11, gap=0.010)
 
     # Divider under header
     fig.lines.append(plt.Line2D([LEFT, 1 - RIGHT],
                                 [1 - TOP - header_block_h + 0.004]*2,
                                 transform=fig.transFigure, color=DIVIDER, lw=0.8, alpha=0.35))
 
-    # ===== PANELS (everything aligned to LEFT) =====
+    # ===== PANELS =====
     def draw_panel(panel_top, title, tuples, *, show_xticks=False, draw_bottom_divider=True):
         n = len(tuples)
         panel_h = header_h + n * row_slot
 
-        # Section title aligned to LEFT baseline
         fig.text(LEFT, panel_top - 0.012, title,
                  ha="left", va="top", color=TITLE_C, fontproperties=H2_FP)
 
-        # Axes: left aligned at LEFT + gutter (so bars line up consistently)
         ax = fig.add_axes([LEFT + gutter,
                            panel_top - header_h - n * row_slot,
                            1 - LEFT - RIGHT - gutter,
@@ -1854,44 +1840,36 @@ else:
         ax.set_facecolor(AX_BG)
         ax.set_xlim(0, 100)
         ax.set_ylim(-0.5, n - 0.5)
-
-        for s in ax.spines.values():
-            s.set_visible(False)
+        for s in ax.spines.values(): s.set_visible(False)
         ax.tick_params(axis="x", bottom=False, labelbottom=False, length=0)
         ax.tick_params(axis="y", left=False,  labelleft=False,  length=0)
         ax.set_yticks([]); ax.get_yaxis().set_visible(False)
 
-        # Track backgrounds
+        # Tracks
         for i in range(n):
             ax.add_patch(plt.Rectangle((0, i - (BAR_FRAC/2)), 100, BAR_FRAC,
                                        color=TRACK, ec="none", zorder=0.5))
-
         # Vertical grid
-        for gx in ticks:
+        for gx in np.arange(0, 101, 10):
             ax.vlines(gx, -0.5, n - 0.5, colors=(0, 0, 0, 0.16), linewidth=0.8, zorder=0.75)
-
         # Bars + values
         for i, (lab, pct, val_str) in enumerate(tuples[::-1]):
             y = i
             bar_w = float(np.clip(pct, 0.0, 100.0))
             ax.add_patch(plt.Rectangle((0, y - (BAR_FRAC / 2)), bar_w, BAR_FRAC,
                                        color=pct_to_rgb(bar_w), ec="none", zorder=1.0))
-
             x_text = 1.0 if bar_w >= 3 else min(100.0, bar_w + 0.8)
-            ax.text(x_text, y, val_str,
-                    ha="left", va="center", color="#0B0B0B",
-                    fontproperties=BAR_VALUE_FP, zorder=2.0, clip_on=False)
-
+            ax.text(x_text, y, val_str, ha="left", va="center",
+                    color="#0B0B0B", fontproperties=BAR_VALUE_FP, zorder=2.0, clip_on=False)
         # 50% reference
         ax.axvline(50, color="#000000", ls=(0, (4, 4)), lw=1.5, alpha=0.7, zorder=3.5)
 
-        # Metric labels aligned to LEFT (figure coords)
+        # Metric labels (figure coords)
         for i, (lab, _, _) in enumerate(tuples[::-1]):
             y_fig = (panel_top - header_h - n * row_slot) + ((i + 0.5) * row_slot)
-            fig.text(LEFT, y_fig, lab,
-                     ha="left", va="center", color=LABEL_C, fontproperties=LABEL_FP)
+            fig.text(LEFT, y_fig, lab, ha="left", va="center", color=LABEL_C, fontproperties=LABEL_FP)
 
-        # Bottom tick marks and numbers (only last panel)
+        # Bottom ticks only on last panel
         if show_xticks:
             trans = ax.get_xaxis_transform()
             INNER_PCT_OFFSET_PT, EDGE_0, EDGE_100 = 7, 4, 10
@@ -1899,13 +1877,11 @@ else:
             offset_pct_0   = ScaledTranslation(EDGE_0/72, 0, fig.dpi_scale_trans)
             offset_pct_100 = ScaledTranslation(EDGE_100/72, 0, fig.dpi_scale_trans)
             y_label = -0.075
-
-            for gx in ticks:
-                ax.plot([gx, gx], [-0.03, 0.0], transform=trans,
-                        color=(0, 0, 0, 0.6), lw=1.1, clip_on=False, zorder=4)
-                ax.text(gx, y_label, f"{int(gx)}", transform=trans,
-                        ha="center", va="top", color="#000000", fontproperties=TICK_FP,
-                        zorder=4, clip_on=False)
+            for gx in np.arange(0, 101, 10):
+                ax.plot([gx, gx], [-0.03, 0.0], transform=trans, color=(0, 0, 0, 0.6),
+                        lw=1.1, clip_on=False, zorder=4)
+                ax.text(gx, y_label, f"{int(gx)}", transform=trans, ha="center", va="top",
+                        color="#000000", fontproperties=TICK_FP, zorder=4, clip_on=False)
                 if gx == 0:
                     ax.text(gx, y_label, "%", transform=trans + offset_pct_0,
                             ha="left", va="top", color="#000000", fontproperties=TICK_FP)
@@ -1916,12 +1892,10 @@ else:
                     ax.text(gx, y_label, "%", transform=trans + offset_inner,
                             ha="left", va="top", color="#000000", fontproperties=TICK_FP)
 
-        # Section divider
         if draw_bottom_divider:
             y0 = panel_top - panel_h - 0.008
             fig.lines.append(plt.Line2D([LEFT, 1 - RIGHT], [y0, y0],
                                         transform=fig.transFigure, color=DIVIDER, lw=1.2, alpha=0.35))
-
         return panel_top - panel_h - GAP
 
     # Render
@@ -1930,7 +1904,7 @@ else:
         is_last = (idx == len(sections) - 1)
         y_top = draw_panel(y_top, title, data, show_xticks=is_last, draw_bottom_divider=not is_last)
 
-    # Footer caption (customizable)
+    # Footer caption
     fig.text((LEFT + gutter + (1 - RIGHT))/2.0, BOT * 0.1, footer_caption_text,
              ha="center", va="center", color=LABEL_C, fontproperties=FOOTER_FP)
 
@@ -1938,7 +1912,7 @@ else:
 
     # Download
     buf = BytesIO()
-    fig.savefig(buf, format="png", dpi=130, bbox_inches="tight", facecolor=fig.get_facecolor())
+    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight", facecolor=fig.get_facecolor())
     buf.seek(0)
     st.download_button(
         "⬇️ Download Feature Z (PNG)",
@@ -1949,6 +1923,7 @@ else:
     )
     plt.close(fig)
 # ============================ END — Feature Z ============================
+
 
 
 
