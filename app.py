@@ -1348,6 +1348,15 @@ from matplotlib.transforms import ScaledTranslation  # pixel-like offsets
 st.markdown("---")
 st.header("📋 Feature F — Percentile Board (uniform rows)")
 
+# --- NEW: footer label controls ---
+_footer_default = "Percentile Rank"
+_edit_footer = st.toggle("Edit footer label", value=False)
+if _edit_footer:
+    footer_label = st.text_input("Footer label", value=_footer_default)
+else:
+    footer_label = _footer_default
+# --- END NEW ---
+
 if player_row.empty:
     st.info("Pick a player above.")
 else:
@@ -1551,7 +1560,7 @@ else:
         y_top = draw_panel(y_top, title, data, show_xticks=is_last, draw_bottom_divider=not is_last)
 
     # Bottom caption — slightly lower
-    fig.text(x_center_plot, bot_margin * 0.38, "Percentile Rank",
+    fig.text(x_center_plot, bot_margin * 0.38, footer_label,
              ha="center", va="center", fontsize=11, fontweight="bold", color=LABEL)
 
     st.pyplot(fig, use_container_width=True)
