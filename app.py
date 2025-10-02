@@ -1601,8 +1601,17 @@ with st.expander("Feature Z options", expanded=False):
         up_img1 = st.file_uploader("Image 1 (rightmost)", type=["png","jpg","jpeg","webp"], key="fz_img1")
         up_img2 = st.file_uploader("Image 2 (middle)",   type=["png","jpg","jpeg","webp"], key="fz_img2")
         up_img3 = st.file_uploader("Image 3 (leftmost)", type=["png","jpg","jpeg","webp"], key="fz_img3")
+
+        # NEW: uniform spacing presets (slightly wider steps from your current default)
+        spacing_preset = st.selectbox(
+            "Badge spacing",
+            ["Tight (default)", "Tight +", "Medium", "Wide"],
+            index=0,
+            help="Keeps equal gaps; each step is a little wider than the previous."
+        )
     else:
         up_img1 = up_img2 = up_img3 = None
+        spacing_preset = "Tight (default)"  # unused when images disabled
 
 def _safe_get(df_or_series, key, default="—"):
     try:
@@ -1707,11 +1716,19 @@ else:
     else:
         fig_size   = (11.8, 9.6); dpi = 120
         title_row_h = 0.125
-        # ↑ add a bit more space so the panel never touches images
         header_block_h = title_row_h + 0.055   # unchanged
-        # badges closer together & equal gaps
         img_box_w = img_box_h = 0.16
-        img_gap   = 0.0001    # smaller gap = closer; equal spacing
+
+        # NEW: choose img_gap & shifts from preset (equalize spacing with s2 = 2*s1)
+        preset_map = {
+            "Tight (default)": {"img_gap": 0.0001, "s0": 0.02, "s1": 0.050},
+            "Tight +":         {"img_gap": 0.0030, "s0": 0.02, "s1": 0.047},
+            "Medium":          {"img_gap": 0.0060, "s0": 0.02, "s1": 0.044},
+            "Wide":            {"img_gap": 0.0100, "s0": 0.02, "s1": 0.040},
+        }
+        _p = preset_map.get(spacing_preset, preset_map["Tight (default)"])
+        img_gap = _p["img_gap"]
+        _s0, _s1, _s2 = _p["s0"], _p["s1"], 2 * _p["s1"]   # keep gaps uniform
 
     GLOBAL_LEFT_PAD = 0.02
     BASE_LEFT, RIGHT = 0.035, 0.020
@@ -1735,7 +1752,7 @@ else:
 
     # --- info rows (now anchored just below the title) ---
     def draw_pairs_line(pairs_line, y):
-        x = LEFT; sep = "  |  "; renderer = fig.canvas.get_renderer()
+        x = LEFT; renderer = fig.canvas.get_renderer()
         for i,(lab,val) in enumerate(pairs_line):
             t1 = fig.text(x, y, lab, ha="left", va="top", color=LABEL_C, fontproperties=INFO_LABEL_FP)
             fig.canvas.draw(); x += t1.get_window_extent(renderer).width / fig.bbox.width
@@ -1755,9 +1772,8 @@ else:
         row2 = [("Games: ",games), ("Goals: ",goals), ("Assists: ",assists)]
         row3 = [("Minutes Played: ",minutes), ("Foot: ",foot)]
 
-        # ⬇️ Anchor to the title baseline so the rows sit just below the title
         title_y = 1 - TOP - 0.010
-        y1 = title_y - 0.045   # first row ~just under title
+        y1 = title_y - 0.045
         y2 = y1 - 0.030
         y3 = y2 - 0.030
 
@@ -1776,13 +1792,14 @@ else:
             if pil_img is None: return
             x_right_edge = 1 - RIGHT
             x = x_right_edge - (right_index + 1) * img_box_w - right_index * img_gap
-            # Nudge middle (index 1) and left (index 2) to the RIGHT
-            per_image_shift = {0: 0.02, 1: 0.05, 2: 0.10}  # tweak these values
+            # Uniform-spacing nudges (right): 0=anchor, 1=middle, 2=left (left = 2× middle)
+            per_image_shift = {0: _s0, 1: _s1, 2: _s2}
             x += per_image_shift.get(right_index, 0.0)
             y_top_band = 1 - TOP - 0.006
             y = y_top_band - img_box_h
             ax_img = fig.add_axes([x, y, img_box_w, img_box_h])
             ax_img.imshow(pil_img); ax_img.axis("off")
+
         add_header_image(_open_upload(up_img1), right_index=0)
         add_header_image(_open_upload(up_img2), right_index=1)
         add_header_image(_open_upload(up_img3), right_index=2)
@@ -1795,7 +1812,7 @@ else:
     # --- panels (labels back to their original y offset) ---
     def draw_panel(panel_top, title, tuples, *, show_xticks=False, draw_bottom_divider=True):
         n = len(tuples); panel_h = header_h + n*row_slot
-        fig.text(LEFT, panel_top - 0.012, title, ha="left", va="top", color=TITLE_C, fontproperties=H2_FP)  # unchanged offset
+        fig.text(LEFT, panel_top - 0.012, title, ha="left", va="top", color=TITLE_C, fontproperties=H2_FP)
 
         ax = fig.add_axes([LEFT + gutter, panel_top - header_h - n*row_slot, 1 - LEFT - RIGHT - gutter, n*row_slot])
         ax.set_facecolor(AX_BG); ax.set_xlim(0,100); ax.set_ylim(-0.5,n-0.5)
@@ -1861,6 +1878,7 @@ else:
     )
     plt.close(fig)
 # ============================ END — Feature Z ============================
+
 
 
 
