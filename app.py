@@ -2330,19 +2330,19 @@ with st.expander("Radar settings", expanded=False):
 if radar_theme == "Dark":
     PAGE_BG = "#0a0f1c"         # page
     AX_BG   = "#0a0f1c"         # chart panel
-    # lighter on the OUTSIDE, alternating toward center (slightly lighter outer band)
-    GRID_BAND_OUTER = "#223454" # lighter outside band (brighter than before)
+    # lighter on the OUTSIDE, alternating toward center (unchanged)
+    GRID_BAND_OUTER = "#162235" # lighter
     GRID_BAND_INNER = "#0d1524" # darker
-    RING_COLOR  = "#cbd5e1"     # outside line more white
+    RING_COLOR  = "#cbd5e1"     # ONLY change: outside ring line more white
     LABEL_COLOR = "#f5f5f5"
     TICK_COLOR  = "#e5e7eb"
     MINUTES_CLR = "#f5f5f5"
 else:
     PAGE_BG = "#ffffff"         # white outside the chart
     AX_BG   = "#ebebeb"         # keep panel soft grey
-    # OUTERMOST ring must be GREY, then alternate grey ↔ white inward
+    # OUTERMOST ring grey, then alternate inward (requested change)
     GRID_BAND_OUTER = "#e5e7eb" # outer grey
-    GRID_BAND_INNER = "#ffffff" # inner white
+    GRID_BAND_INNER = "#ffffff" # then white, alternating
     RING_COLOR  = "#d1d5db"
     LABEL_COLOR = "#0f172a"
     TICK_COLOR  = "#6b7280"
@@ -2442,11 +2442,10 @@ else:
                             ax.set_xticklabels(labels, fontsize=AXIS_FS, color=LABEL_COLOR, fontweight=600)
                             ax.set_yticks([]); ax.grid(False); [s.set_visible(False) for s in ax.spines.values()]
 
-                            # radial bands (10 bands from INNER_HOLE to 100). i=0 inner ... i=9 outer
+                            # radial bands (10 bands from INNER_HOLE to 100) – i=9 is OUTER band
                             ring_edges = np.linspace(INNER_HOLE, 100, 11)
                             for i in range(10):
                                 r0, r1 = ring_edges[i], ring_edges[i+1]
-                                # choose band so that OUTERMOST ring (i=9) uses GRID_BAND_OUTER
                                 band = GRID_BAND_OUTER if ((9 - i) % 2 == 0) else GRID_BAND_INNER
                                 ax.add_artist(Wedge(
                                     (0,0), r1, 0, 360, width=(r1-r0),
@@ -2454,7 +2453,7 @@ else:
                                     edgecolor="none", zorder=0.8
                                 ))
 
-                            # ring outlines (outside line is light in dark theme)
+                            # ring outlines
                             ring_t = np.linspace(0, 2*np.pi, 361)
                             for r in ring_edges:
                                 ax.plot(ring_t, np.full_like(ring_t, r), color=RING_COLOR, lw=RING_LW, zorder=0.9)
@@ -2499,10 +2498,11 @@ else:
                         )
                         st.caption(
                             "Ring labels show the **actual dataset values** at each decile (0–100th), rounded to **1 decimal place**. "
-                            "Light theme uses an **outer grey ring** alternating inward; Dark theme uses a refined palette with a **brighter outer line**."
+                            "Light theme uses a **grey outer band** alternating inward; Dark theme keeps bands the same but uses a **brighter outer ring line**."
                         )
                         st.pyplot(fig_r, use_container_width=True)
 # ----------------- END Radar -----------------
+
 
 
 
