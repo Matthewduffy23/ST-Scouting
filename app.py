@@ -2312,7 +2312,9 @@ with st.expander("Scatter settings", expanded=False):
 
 
 
-# ----------------- (B) COMPARISON RADAR — decile tick values (1dp) + light/dark theme + exact edge + centered/tangential labels -----------------
+# ----------------- (B) COMPARISON RADAR — decile tick values (1dp) + light/dark theme + exact edge + centered/upright outside labels -----------------
+import re
+
 st.markdown("---")
 st.header("📊 Player Comparison Radar")
 
@@ -2436,14 +2438,8 @@ else:
                         import pandas as pd
 
                         def _tangent_rotation(ax, theta):
-                            """
-                            Return the on-screen tangential rotation (degrees)
-                            that respects theta_direction and theta_offset.
-                            This gives the 'lean with the wheel' look.
-                            """
-                            return np.degrees(
-                                ax.get_theta_direction() * theta + ax.get_theta_offset()
-                            ) - 90.0
+                            """Tangential rotation in display space, respecting theta offset/direction."""
+                            return np.degrees(ax.get_theta_direction() * theta + ax.get_theta_offset()) - 90.0
 
                         def draw_radar(labels, A_r, B_r, ticks, headerA, subA, headerB, subB):
                             N = len(labels)
@@ -2461,7 +2457,7 @@ else:
                             ax.set_theta_direction(-1)
 
                             ax.set_xticks(theta)
-                            ax.set_xticklabels([])  # we’ll draw our own
+                            ax.set_xticklabels([])  # custom labels below
                             ax.set_yticks([])
                             ax.grid(False)
                             [s.set_visible(False) for s in ax.spines.values()]
@@ -2492,11 +2488,14 @@ else:
                                             ha="center", va="center",
                                             fontsize=TICK_FS, color=TICK_COLOR, zorder=1.1)
 
-                            # --- EXACT StatsBomb-like axis labels ---
-                            # Centered at the metric angle, at the outer ring (tiny pad), tangential rotation in display space.
-                            OUTER_LABEL_R = 100.8  # slightly outside 100 ring; adjust 100.5–101.5 as needed
+                            # --- Outside metric labels: centered, flipped only if upside-down, pushed further out ---
+                            OUTER_LABEL_R = 105.6  # distance from outer ring; try 105.0–107.0
                             for ang, lab in zip(theta, labels):
-                                rot = _tangent_rotation(ax, ang)
+                                rot = _tangent_rotation(ax, ang)  # tangential angle in display space
+                                # Keep text upright: flip if rotation would be upside-down
+                                rot_norm = ((rot + 180.0) % 360.0) - 180.0
+                                if rot_norm > 90 or rot_norm < -90:
+                                    rot += 180.0
                                 ax.text(
                                     ang, OUTER_LABEL_R, lab,
                                     rotation=rot, rotation_mode="anchor",
@@ -2515,7 +2514,7 @@ else:
                             ax.plot(theta_c, Br, color=COL_B, lw=2.2, zorder=3)
                             ax.fill(theta_c, Br, color=FILL_B, zorder=2.5)
 
-                            # keep edge exactly at 100; labels are allowed outside via clip_on=False
+                            # keep edge exactly at 100; labels allowed outside via clip_on=False
                             ax.set_rlim(0, 100)
 
                             # headers (teams / leagues / minutes)
@@ -2539,10 +2538,11 @@ else:
                         )
                         st.caption(
                             "Ring labels show the **actual dataset values** at each decile (0–100th), rounded to **1 decimal place**. "
-                            "Axis labels are centered on their metric angle and tangentially rotated, matching the example style."
+                            "Axis labels are centered on their metric angle, auto-flipped upright, and placed outside the 100 ring."
                         )
                         st.pyplot(fig_r, use_container_width=True)
 # ----------------- END Radar -----------------
+
 
 
 
