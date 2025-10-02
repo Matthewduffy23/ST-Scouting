@@ -1710,7 +1710,7 @@ else:
         # ↑ add a bit more space so the panel never touches images
         header_block_h = title_row_h + 0.055   # unchanged
         # badges closer together & equal gaps
-        img_box_w = img_box_h = 0.16
+        img_box_w = img_box_h = 0.17
         img_gap   = 0.0001    # smaller gap = closer; equal spacing
 
     GLOBAL_LEFT_PAD = 0.02
@@ -1777,7 +1777,7 @@ else:
             x_right_edge = 1 - RIGHT
             x = x_right_edge - (right_index + 1) * img_box_w - right_index * img_gap
             # Nudge middle (index 1) and left (index 2) to the RIGHT
-            per_image_shift = {0: 0.00, 1: 0.015, 2: 0.025}  # tweak these values
+            per_image_shift = {0: 0.00, 1: 0.025, 2: 0.035}  # tweak these values
             x += per_image_shift.get(right_index, 0.0)
             y_top_band = 1 - TOP - 0.006
             y = y_top_band - img_box_h
