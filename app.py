@@ -2328,22 +2328,24 @@ with st.expander("Radar settings", expanded=False):
 
 # Colors per theme
 if radar_theme == "Dark":
-    PAGE_BG = "#0a0f1c"         # page
-    AX_BG   = "#0a0f1c"         # chart panel
+    PAGE_BG = "#0a0f1c"   # page
+    AX_BG   = "#0a0f1c"   # chart panel
     # lighter on the OUTSIDE, alternating toward center (unchanged)
-    GRID_BAND_OUTER = "#162235" # lighter
-    GRID_BAND_INNER = "#0d1524" # darker
-    RING_COLOR  = "#cbd5e1"     # ONLY change: outside ring line more white
+    GRID_BAND_OUTER = "#162235"
+    GRID_BAND_INNER = "#0d1524"
+    # ONLY the OUTER ring outline brighter; inner ring outlines stay as before
+    RING_COLOR_INNER = "#3a4050"
+    RING_COLOR_OUTER = "#cbd5e1"
     LABEL_COLOR = "#f5f5f5"
     TICK_COLOR  = "#e5e7eb"
     MINUTES_CLR = "#f5f5f5"
 else:
-    PAGE_BG = "#ffffff"         # white outside the chart
-    AX_BG   = "#ebebeb"         # keep panel soft grey
-    # OUTERMOST ring grey, then alternate inward (requested change)
-    GRID_BAND_OUTER = "#e5e7eb" # outer grey
-    GRID_BAND_INNER = "#ffffff" # then white, alternating
-    RING_COLOR  = "#d1d5db"
+    PAGE_BG = "#ffffff"   # white outside the chart
+    AX_BG   = "#ebebeb"   # keep panel soft grey
+    # OUTERMOST band grey, then alternate inward
+    GRID_BAND_OUTER = "#e5e7eb"
+    GRID_BAND_INNER = "#ffffff"
+    RING_COLOR_INNER = RING_COLOR_OUTER = "#d1d5db"
     LABEL_COLOR = "#0f172a"
     TICK_COLOR  = "#6b7280"
     MINUTES_CLR = "#374151"
@@ -2410,7 +2412,7 @@ else:
                         # Labels
                         labels = [_clean_radar_label(m) for m in radar_metrics]
 
-                        # === TRUE decile tick values (dataset values at 0,10,...,100th percentiles) ===
+                        # TRUE deciles (0..100) for each metric — displayed at 1dp
                         qs = np.linspace(0, 100, 11)
                         axis_ticks = [np.nanpercentile(pool[m].values, qs) for m in radar_metrics]
 
@@ -2453,15 +2455,16 @@ else:
                                     edgecolor="none", zorder=0.8
                                 ))
 
-                            # ring outlines
+                            # ring outlines — ONLY the outermost ring brighter in dark theme
                             ring_t = np.linspace(0, 2*np.pi, 361)
-                            for r in ring_edges:
-                                ax.plot(ring_t, np.full_like(ring_t, r), color=RING_COLOR, lw=RING_LW, zorder=0.9)
+                            for j, r in enumerate(ring_edges):
+                                col = RING_COLOR_OUTER if j == len(ring_edges)-1 else RING_COLOR_INNER
+                                ax.plot(ring_t, np.full_like(ring_t, r), color=col, lw=RING_LW, zorder=0.9)
 
                             # numeric tick labels at each ring = TRUE dataset quantiles (rounded to 1dp)
                             start_idx = 2  # show from 20th to reduce clutter
                             for i, ang in enumerate(theta):
-                                vals = ticks[i]  # 11 values (0..100th)
+                                vals = ticks[i]
                                 for rr, v in zip(ring_edges[start_idx:], vals[start_idx:]):
                                     ax.text(ang, rr-1.8, f"{float(v):.1f}",
                                             ha="center", va="center",
@@ -2498,19 +2501,11 @@ else:
                         )
                         st.caption(
                             "Ring labels show the **actual dataset values** at each decile (0–100th), rounded to **1 decimal place**. "
-                            "Light theme uses a **grey outer band** alternating inward; Dark theme keeps bands the same but uses a **brighter outer ring line**."
+                            "Dark theme: only the **outermost ring outline** is brighter; inner outlines remain subtle. "
+                            "Light theme: outer band is grey and alternates inward."
                         )
                         st.pyplot(fig_r, use_container_width=True)
 # ----------------- END Radar -----------------
-
-
-
-
-
-
-
-
-
 
 
 
