@@ -2312,7 +2312,7 @@ with st.expander("Scatter settings", expanded=False):
 
 
 
-# ----------------- (B) COMPARISON RADAR — decile tick values (1dp) + light/dark theme + exact edge + StatsBomb-style labels -----------------
+# ----------------- (B) COMPARISON RADAR — decile tick values (1dp) + light/dark theme + exact edge + centered/tangential labels -----------------
 st.markdown("---")
 st.header("📊 Player Comparison Radar")
 
@@ -2343,7 +2343,6 @@ if radar_theme == "Dark":
     GRID_BAND_INNER = "#0d1524"
     RING_COLOR_INNER = "#3a4050"
     RING_COLOR_OUTER = "#cbd5e1"
-    LABEL_COLOR = "#0f172a" if False else "#e6e7ea"  # keep your tone; label color controlled below
     LABEL_COLOR = "#f5f5f5"
     TICK_COLOR  = "#e5e7eb"
     MINUTES_CLR = "#f5f5f5"
@@ -2436,6 +2435,16 @@ else:
                         import numpy as np
                         import pandas as pd
 
+                        def _tangent_rotation(ax, theta):
+                            """
+                            Return the on-screen tangential rotation (degrees)
+                            that respects theta_direction and theta_offset.
+                            This gives the 'lean with the wheel' look.
+                            """
+                            return np.degrees(
+                                ax.get_theta_direction() * theta + ax.get_theta_offset()
+                            ) - 90.0
+
                         def draw_radar(labels, A_r, B_r, ticks, headerA, subA, headerB, subB):
                             N = len(labels)
                             theta = np.linspace(0, 2*np.pi, N, endpoint=False)
@@ -2446,25 +2455,16 @@ else:
                             fig = plt.figure(figsize=(13.2, 8.0), dpi=260)
                             fig.patch.set_facecolor(PAGE_BG)
                             ax = plt.subplot(111, polar=True); ax.set_facecolor(AX_BG)
-                            ax.set_theta_offset(np.pi/2); ax.set_theta_direction(-1)
+
+                            # Orientation like your original
+                            ax.set_theta_offset(np.pi/2)
+                            ax.set_theta_direction(-1)
+
                             ax.set_xticks(theta)
+                            ax.set_xticklabels([])  # we’ll draw our own
                             ax.set_yticks([])
                             ax.grid(False)
                             [s.set_visible(False) for s in ax.spines.values()]
-
-                            # --- StatsBomb-style outside labels: centered, tangential, not flipped ---
-                            ax.set_xticklabels([])  # remove defaults
-                            OUTER_LABEL_R = 103.5   # close to outer ring; tweak 102–106 as desired
-                            for ang, lab in zip(theta, labels):
-                                deg = np.degrees(ang)
-                                rot = deg - 90          # tangential
-                                ax.text(
-                                    ang, OUTER_LABEL_R, lab,
-                                    rotation=rot, rotation_mode="anchor",
-                                    ha="center", va="center",
-                                    fontsize=AXIS_FS, color=LABEL_COLOR, fontweight=600,
-                                    clip_on=False, zorder=2.2
-                                )
 
                             # radial bands (10 bands from INNER_HOLE to 100)
                             ring_edges = np.linspace(INNER_HOLE, 100, 11)
@@ -2492,6 +2492,19 @@ else:
                                             ha="center", va="center",
                                             fontsize=TICK_FS, color=TICK_COLOR, zorder=1.1)
 
+                            # --- EXACT StatsBomb-like axis labels ---
+                            # Centered at the metric angle, at the outer ring (tiny pad), tangential rotation in display space.
+                            OUTER_LABEL_R = 100.8  # slightly outside 100 ring; adjust 100.5–101.5 as needed
+                            for ang, lab in zip(theta, labels):
+                                rot = _tangent_rotation(ax, ang)
+                                ax.text(
+                                    ang, OUTER_LABEL_R, lab,
+                                    rotation=rot, rotation_mode="anchor",
+                                    ha="center", va="center",
+                                    fontsize=AXIS_FS, color=LABEL_COLOR, fontweight=600,
+                                    clip_on=False, zorder=2.2
+                                )
+
                             # center hole
                             ax.add_artist(Circle((0,0), radius=INNER_HOLE-0.6, transform=ax.transData._b,
                                                  color=PAGE_BG, zorder=1.2, ec="none"))
@@ -2502,7 +2515,7 @@ else:
                             ax.plot(theta_c, Br, color=COL_B, lw=2.2, zorder=3)
                             ax.fill(theta_c, Br, color=FILL_B, zorder=2.5)
 
-                            # keep edge exactly at 100 but allow labels outside via clip_on=False above
+                            # keep edge exactly at 100; labels are allowed outside via clip_on=False
                             ax.set_rlim(0, 100)
 
                             # headers (teams / leagues / minutes)
@@ -2526,11 +2539,11 @@ else:
                         )
                         st.caption(
                             "Ring labels show the **actual dataset values** at each decile (0–100th), rounded to **1 decimal place**. "
-                            "Dark theme: only the **outermost ring outline** is brighter; inner outlines remain subtle. "
-                            "Light theme: outer band is grey and alternates inward."
+                            "Axis labels are centered on their metric angle and tangentially rotated, matching the example style."
                         )
                         st.pyplot(fig_r, use_container_width=True)
 # ----------------- END Radar -----------------
+
 
 
 
