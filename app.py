@@ -368,9 +368,8 @@ for role, role_def in ROLES.items():
         st.dataframe(top_table(filtered_view(df_f, value_max=v_max), role, int(top_n)), use_container_width=True)
         st.divider()
 
-# ----------------- METRIC LEADERBOARD — themed + palettes + custom title -----------------
+# ----------------- METRIC LEADERBOARD — themed + palettes + custom title + highlights -----------------
 import re, numpy as np, matplotlib.pyplot as plt
-from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.ticker import FuncFormatter
 from matplotlib import rcParams, font_manager as fm
 import pandas as pd
@@ -406,7 +405,7 @@ with st.expander("Leaderboard settings", expanded=False):
     TICK     = "#374151" if theme == "Light" else "#d1d5db"
     SPINE    = "#d1d5db" if theme == "Light" else "#6b7280"
 
-    # Palette options (exactly as scatterplot)
+    # Palette options (same as scatterplot)
     palette_options = [
         "Red–Gold–Green (diverging)",
         "Light-grey → Black",
@@ -422,7 +421,7 @@ with st.expander("Leaderboard settings", expanded=False):
 
     # Custom title
     show_title   = st.checkbox("Show custom title", value=False, key="lb_show_title")
-    custom_title = st.text_input("Custom title", f"Top {top_n} – {metric_pick}", key="lb_title")
+    custom_title = st.text_input("Custom title", "Top N – Metric", key="lb_title")
 
 # --- Data
 val_col = metric_pick
@@ -431,21 +430,27 @@ plot_df[val_col] = pd.to_numeric(plot_df[val_col], errors="coerce")
 plot_df = plot_df.dropna(subset=[val_col])
 plot_df = plot_df.sort_values(val_col, ascending=False).head(int(top_n)).reset_index(drop=True)
 
-# Label: "M.Grimes, Coventry"
-def label_name_team(player, team):
+# Option: highlight a single player (from current Top N)
+highlight_player = st.selectbox(
+    "Highlight single player (from Top N)", ["(None)"] + plot_df["Player"].astype(str).tolist(),
+    index=0, key="lb_highlight_player"
+)
+
+# --- Label helpers
+def abbrev_name(player):
     tokens = re.split(r"\s+", str(player).strip())
     if tokens and tokens[0]:
         initial = tokens[0][0]
         last = re.sub(r"[^\w\-’']", "", tokens[-1])
-        name = f"{initial}.{last}"
-    else:
-        name = str(player)
-    return f"{name}, {team}"
+        return f"{initial}.{last}"
+    return str(player)
 
-y_labels = [label_name_team(r.Player, r.Team) for r in plot_df.itertuples(index=False)]
-vals = plot_df[val_col].astype(float).values if len(plot_df) else np.array([0.0])
+p_abbr = [abbrev_name(p) for p in plot_df["Player"]]
+teams  = plot_df["Team"].astype(str).tolist()
+vals   = plot_df[val_col].astype(float).values if len(plot_df) else np.array([0.0])
 
-# --- Colour mapping (identical logic to scatterplot)
+# --- Colour mapping (same logic as scatterplot)
+import numpy as np
 def interp(a, b, u):
     a = np.array(a, dtype=float); b = np.array(b, dtype=float)
     return (a + (b - a) * np.clip(u, 0, 1)) / 255.0
@@ -467,8 +472,7 @@ def color_mapper(palette, t):
         return interp(purple, mid, t/0.5) if t <= 0.5 else interp(mid, gold, (t-0.5)/0.5)
     if palette == "All White":
         return np.array([255,255,255])/255.0
-    # else "All Black"
-    return np.array([0,0,0])/255.0
+    return np.array([0,0,0])/255.0  # "All Black"
 
 if len(vals) > 1:
     vmin, vmax = float(vals.min()), float(vals.max())
@@ -486,49 +490,69 @@ fig, ax = plt.subplots(figsize=(11.5, 6.2))
 fig.patch.set_facecolor(PAGE_BG)
 ax.set_facecolor(PLOT_BG)
 
-# Title
-title_text = custom_title.strip() if (show_title and custom_title.strip()) else f"Top {len(plot_df)} – {metric_pick}"
-fig.suptitle(title_text, fontsize=16, fontweight="bold", color=TXT, y=0.985)
+# Title (2× font size)
+default_title = f"Top {len(plot_df)} – {metric_pick}"
+title_text = custom_title.strip() if (show_title and custom_title.strip()) else default_title
+fig.suptitle(title_text, fontsize=32, fontweight="bold", color=TXT, y=0.985)  # 32 (was 16)
 
-plt.subplots_adjust(top=0.90, left=0.27, right=0.965, bottom=0.14)
+# Layout
+plt.subplots_adjust(top=0.90, left=0.30, right=0.965, bottom=0.14)
 
 # Bars
-bars = ax.barh(range(len(vals)), vals, color=bar_colors, edgecolor="none", zorder=2)
+ypos = np.arange(len(vals))
+bars = ax.barh(ypos, vals, color=bar_colors, edgecolor="none", zorder=2)
+
+# Highlight a single player (amber, white edge)
+if highlight_player and highlight_player != "(None)":
+    mask = plot_df["Player"].astype(str) == highlight_player
+    if mask.any():
+        idxs = np.where(mask.values)[0]
+        for i in idxs:
+            bars[i].set_color("#f59e0b")
+            bars[i].set_edgecolor("white")
+            bars[i].set_linewidth(1.6)
+            bars[i].set_zorder(5)
 
 # Axes & labels
 ax.invert_yaxis()
-ax.set_yticks(range(len(vals)))
-ax.set_yticklabels(y_labels, fontsize=10.5, color=TXT)
+ax.set_yticks(ypos)
+# We'll use custom tick labels with mathtext so only the player is semibold
+yticklabels_math = [rf'$\bf{{{p}}}$, {t}' for p, t in zip(p_abbr, teams)]
+ax.set_yticklabels(yticklabels_math, fontsize=10.5, color=TXT)  # player part is bold via mathtext
 ax.set_ylabel("")
-ax.set_xlabel(val_col, color=TXT, labelpad=6, fontsize=10.5, fontweight="semibold")
+ax.set_xlabel(val_col, color=TXT, labelpad=6, fontsize=10.5, fontweight="semibold")  # semibold axis label
 
 # Gridlines
 ax.grid(axis="x", color=GRID_MAJ, linewidth=0.8, zorder=1)
 
 # Spines & ticks
-for side in ["top","right"]:
+for side in ["top","right","left"]:
     ax.spines[side].set_visible(False)
-ax.spines["left"].set_visible(False)
 ax.spines["bottom"].set_color(SPINE)
 ax.tick_params(axis="y", length=0)
 ax.tick_params(axis="x", labelsize=9.5, colors=TICK)
 
-# X ticks
+# X ticks formatting and weight (medium)
 def fmt(x, _): return f"{x:,.0f}" if float(x).is_integer() else f"{x:,.2f}"
 ax.xaxis.set_major_formatter(FuncFormatter(fmt))
+for tick in ax.get_xticklabels():
+    tick.set_fontweight("medium")  # medium weight for tick values
+
+# Range & padding
 xmax = float(vals.max()) if len(vals) else 1.0
 ax.set_xlim(0, xmax * 1.1)
 
-# Value labels
+# Value labels (1 pt smaller than before → 8.5)
 pad = (ax.get_xlim()[1] - ax.get_xlim()[0]) * 0.012
 for rect, v in zip(bars, vals):
     ax.text(rect.get_width() + pad,
             rect.get_y() + rect.get_height()/2,
             fmt(v, None),
-            va="center", ha="left", fontsize=9.5, color=TXT)
+            va="center", ha="left", fontsize=8.5, color=TXT)
 
 st.pyplot(fig, use_container_width=True)
 # ----------------- END -----------------
+
 
 
 
