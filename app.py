@@ -1566,7 +1566,7 @@ else:
 # ============================ END — Feature F ============================
 
 
-# ============================ (Z) THREE-PANEL PERCENTILE BOARD — default size; expands when images ON + 2-line info ============================
+# ============================ (Z) THREE-PANEL PERCENTILE BOARD — default; expands when images ON + reordered info ============================
 from io import BytesIO
 import uuid, numpy as np
 import matplotlib.pyplot as plt
@@ -1707,12 +1707,12 @@ else:
         header_block_h = title_row_h + 0.020
         img_box_w = img_box_h = 0.09; img_gap = 0.012  # not used when images off
     else:
-        # == enlarge + room for images and split info over 2 lines ==
+        # == enlarged header with tighter spacing (graph/line moves up) ==
         fig_size   = (11.8, 9.6); dpi = 120
-        title_row_h = 0.14         # taller title band
-        header_block_h = title_row_h + 0.035
-        img_box_w = img_box_h = 0.13  # bigger
-        img_gap = 0.008               # closer together
+        title_row_h = 0.125            # was 0.14 -> tighter
+        header_block_h = title_row_h + 0.028
+        img_box_w = img_box_h = 0.145  # slightly bigger images
+        img_gap = 0.003                # ~60% less than previous 0.008
 
     GLOBAL_LEFT_PAD = 0.02
     BASE_LEFT, RIGHT = 0.035, 0.020
@@ -1731,17 +1731,25 @@ else:
     ticks = np.arange(0,101,10)
 
     # ===== Header title =====
-    title_x = LEFT + TITLE_LEFT_NUDGE
-    fig.text(title_x, 1 - TOP - 0.010, f"{name}\u2009|\u2009{team}", ha="left", va="top",
-             color=TITLE_C, fontproperties=TITLE_FP)
+    fig.text(LEFT + TITLE_LEFT_NUDGE, 1 - TOP - 0.010, f"{name}\u2009|\u2009{team}",
+             ha="left", va="top", color=TITLE_C, fontproperties=TITLE_FP)
 
-    # ===== Info row (1 line normally; 2 lines of 4 when images enabled) =====
-    pairs = [
-        ("Position: ",pos), ("Age: ",age), ("Games: ",games), ("Minutes: ",minutes),
-        ("Goals: ",goals), ("Assists: ",assists), ("Foot: ",foot)
+    # ===== Info row (reordered). If images ON -> 2 lines of 4 items =====
+    # Desired order: Position, Age, Height, Foot, Games, Minutes, Goals, Assists
+    # (Height only included if enabled/provided)
+    ordered_pairs = [
+        ("Position: ", pos),
+        ("Age: ",      age),
     ]
     if show_height and height_text.strip():
-        pairs.append(("Height: ", height_text.strip()))
+        ordered_pairs.append(("Height: ", height_text.strip()))
+    ordered_pairs.extend([
+        ("Foot: ",     foot),
+        ("Games: ",    games),
+        ("Minutes: ",  minutes),
+        ("Goals: ",    goals),
+        ("Assists: ",  assists),
+    ])
 
     def draw_pairs_line(pairs_line, y):
         x = LEFT
@@ -1758,13 +1766,15 @@ else:
 
     if not enable_images:
         y_info = 1 - TOP - title_row_h + 0.010
-        draw_pairs_line(pairs, y_info)
+        draw_pairs_line(ordered_pairs, y_info)
     else:
-        # two rows: first 4, next 4 (remaining)
-        y1 = 1 - TOP - (title_row_h * 0.52)
-        y2 = y1 - 0.035
-        draw_pairs_line(pairs[:4], y1)
-        draw_pairs_line(pairs[4:8], y2)
+        # two rows: first 4, then next 4
+        first_line  = ordered_pairs[:4]
+        second_line = ordered_pairs[4:8]
+        y1 = 1 - TOP - (title_row_h * 0.46)  # slightly higher than before
+        y2 = y1 - 0.030
+        draw_pairs_line(first_line,  y1)
+        draw_pairs_line(second_line, y2)
 
     # ===== Header images (only when enabled) =====
     def _open_upload(u):
@@ -1773,20 +1783,22 @@ else:
         except Exception: return None
 
     if enable_images:
-        def add_header_image(pil_img, right_index=0, box_w=img_box_w, box_h=img_box_h, gap=img_gap):
+        # Keep rightmost fixed to the current position; others pack left with reduced gap.
+        def add_header_image(pil_img, right_index=0):
             if pil_img is None: return
             x_right_edge = 1 - RIGHT
-            x = x_right_edge - (right_index + 1) * box_w - right_index * gap
+            # right_index: 0 rightmost; 1 next left; etc.
+            x = x_right_edge - (right_index + 1) * img_box_w - right_index * img_gap
             y_top_band = 1 - TOP - 0.006
-            y = y_top_band - box_h
-            ax_img = fig.add_axes([x, y, box_w, box_h])
+            y = y_top_band - img_box_h
+            ax_img = fig.add_axes([x, y, img_box_w, img_box_h])
             ax_img.imshow(pil_img); ax_img.axis("off")
 
         add_header_image(_open_upload(up_img1), right_index=0)
         add_header_image(_open_upload(up_img2), right_index=1)
         add_header_image(_open_upload(up_img3), right_index=2)
 
-    # Divider
+    # Divider under header
     fig.lines.append(plt.Line2D([LEFT, 1 - RIGHT],
                                 [1 - TOP - header_block_h + 0.004]*2,
                                 transform=fig.transFigure, color=DIVIDER, lw=0.8, alpha=0.35))
@@ -1823,7 +1835,6 @@ else:
         if show_xticks:
             trans = ax.get_xaxis_transform()
             INNER_PCT_OFFSET_PT, EDGE_0, EDGE_100 = 7, 4, 10
-            from matplotlib.transforms import ScaledTranslation
             offset_inner   = ScaledTranslation(INNER_PCT_OFFSET_PT/72,0,fig.dpi_scale_trans)
             offset_pct_0   = ScaledTranslation(EDGE_0/72,0,fig.dpi_scale_trans)
             offset_pct_100 = ScaledTranslation(EDGE_100/72,0,fig.dpi_scale_trans)
