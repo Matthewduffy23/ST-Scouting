@@ -1566,7 +1566,7 @@ else:
 # ============================ END — Feature F ============================
 
 
-# ============================ (Z) THREE-PANEL PERCENTILE BOARD — default; expands when images ON + reordered info ============================
+# ============================ (Z) THREE-PANEL PERCENTILE BOARD — images-on: 3-row info + tighter badges + safe spacing ============================
 from io import BytesIO
 import uuid, numpy as np
 import matplotlib.pyplot as plt
@@ -1581,8 +1581,14 @@ st.header("📋 Feature Z — White Percentile Board")
 
 # ---------- controls ----------
 with st.expander("Feature Z options", expanded=False):
-    enable_images = st.checkbox("Add header images", value=False)
+    enable_images = st.checkbox("Add header images", value=True)
     show_height   = st.checkbox("Show height in info row", value=True)
+
+    # Override display name
+    name_override_on = st.checkbox("Edit player display name", value=False)
+    name_override    = st.text_input("Display name", "", disabled=not name_override_on)
+
+    # Height helper
     default_height = ""
     try:
         if not player_row.empty:
@@ -1591,13 +1597,14 @@ with st.expander("Feature Z options", expanded=False):
                     default_height = str(player_row.iloc[0][col]).strip(); break
     except Exception: pass
     height_text = st.text_input("Height value (e.g., 6'2\")", default_height)
+
     footer_caption_text = st.text_input("Footer caption", "Percentile Rank")
 
     if enable_images:
-        st.caption("Upload up to three header images (PNG recommended).")
+        st.caption("Upload up to three header images (PNG recommended). Rightmost acts as anchor.")
         up_img1 = st.file_uploader("Image 1 (rightmost)", type=["png","jpg","jpeg","webp"], key="fz_img1")
-        up_img2 = st.file_uploader("Image 2",           type=["png","jpg","jpeg","webp"], key="fz_img2")
-        up_img3 = st.file_uploader("Image 3 (leftmost)",type=["png","jpg","jpeg","webp"], key="fz_img3")
+        up_img2 = st.file_uploader("Image 2 (middle)",   type=["png","jpg","jpeg","webp"], key="fz_img2")
+        up_img3 = st.file_uploader("Image 3 (leftmost)", type=["png","jpg","jpeg","webp"], key="fz_img3")
     else:
         up_img1 = up_img2 = up_img3 = None
 
@@ -1635,14 +1642,18 @@ if player_row.empty:
     st.info("Pick a player above.")
 else:
     # -------- header fields --------
-    pos     = _safe_get(player_row, "Position", "CM/DM/RW")
-    name    = _safe_get(player_row, "Player", _safe_get(player_row, "Name", "Kadeem Harris"))
-    team    = _safe_get(player_row, "Team", "Carlisle United")
+    pos   = _safe_get(player_row, "Position", "CM/DM/RW")
+    name_ = _safe_get(player_row, "Player", _safe_get(player_row, "Name", "Kadeem Harris"))
+    if name_override_on and name_override.strip():
+        name_ = name_override.strip()
+    team  = _safe_get(player_row, "Team", "Carlisle United")
+
     age_raw = _safe_get(player_row, "Age", "31.0")
     try: age = f"{float(age_raw):.0f}"
     except Exception: age = age_raw
+
     games   = _safe_get(player_row, "Matches played", _safe_get(player_row, "Games", _safe_get(player_row, "Apps", "—")))
-    minutes = _safe_get(player_row, "Minutes", _safe_get(player_row, "Minutes played", "—"))
+    minutes = _safe_get(player_row, "Minutes", _safe_get(player_row, "Minutes played", "—"))  # will relabel to Minutes Played
     goals   = _safe_get(player_row, "Goals", "—")
     assists = _safe_get(player_row, "Assists", "—")
     foot    = _safe_get(player_row, "Foot", _safe_get(player_row, "Preferred Foot", "—"))
@@ -1699,20 +1710,20 @@ else:
     def _blend(c1,c2,t): c=c1+(c2-c1)*np.clip(t,0,1); return f"#{int(c[0]):02x}{int(c[1]):02x}{int(c[2]):02x}"
     def pct_to_rgb(v): v=float(np.clip(v,0,100)); return _blend(TAB_RED,TAB_GOLD,v/50) if v<=50 else _blend(TAB_GOLD,TAB_GREEN,(v-50)/50)
 
-    # ----- layout constants (default vs enlarged when images ON) -----
+    # ----- layout constants (default vs images ON) -----
     if not enable_images:
-        # == previous default measurements ==
         fig_size   = (10, 8); dpi = 100
         title_row_h = 0.075
         header_block_h = title_row_h + 0.020
-        img_box_w = img_box_h = 0.09; img_gap = 0.012  # not used when images off
+        img_box_w = img_box_h = 0.09; img_gap = 0.012  # unused
     else:
-        # == enlarged header with tighter spacing (graph/line moves up) ==
         fig_size   = (11.8, 9.6); dpi = 120
-        title_row_h = 0.125            # was 0.14 -> tighter
-        header_block_h = title_row_h + 0.028
-        img_box_w = img_box_h = 0.145  # slightly bigger images
-        img_gap = 0.003                # ~60% less than previous 0.008
+        title_row_h = 0.125                 # slightly tighter band
+        # push divider/chart a touch LOWER so it won't cross the images
+        header_block_h = title_row_h + 0.035
+        # images: make bigger; keep rightmost fixed, others move closer (gap ~ 60% smaller)
+        img_box_w = img_box_h = 0.15
+        img_gap   = 0.003
 
     GLOBAL_LEFT_PAD = 0.02
     BASE_LEFT, RIGHT = 0.035, 0.020
@@ -1730,31 +1741,13 @@ else:
     gutter = 0.215
     ticks = np.arange(0,101,10)
 
-    # ===== Header title =====
-    fig.text(LEFT + TITLE_LEFT_NUDGE, 1 - TOP - 0.010, f"{name}\u2009|\u2009{team}",
+    # ===== Title =====
+    fig.text(LEFT + TITLE_LEFT_NUDGE, 1 - TOP - 0.010, f"{name_}\u2009|\u2009{team}",
              ha="left", va="top", color=TITLE_C, fontproperties=TITLE_FP)
 
-    # ===== Info row (reordered). If images ON -> 2 lines of 4 items =====
-    # Desired order: Position, Age, Height, Foot, Games, Minutes, Goals, Assists
-    # (Height only included if enabled/provided)
-    ordered_pairs = [
-        ("Position: ", pos),
-        ("Age: ",      age),
-    ]
-    if show_height and height_text.strip():
-        ordered_pairs.append(("Height: ", height_text.strip()))
-    ordered_pairs.extend([
-        ("Foot: ",     foot),
-        ("Games: ",    games),
-        ("Minutes: ",  minutes),
-        ("Goals: ",    goals),
-        ("Assists: ",  assists),
-    ])
-
+    # ===== Info rows (images ON -> 3 rows, else single row) =====
     def draw_pairs_line(pairs_line, y):
-        x = LEFT
-        sep = "  |  "
-        renderer = fig.canvas.get_renderer()
+        x = LEFT; sep = "  |  "; renderer = fig.canvas.get_renderer()
         for i,(lab,val) in enumerate(pairs_line):
             t1 = fig.text(x, y, lab, ha="left", va="top", color=LABEL_C, fontproperties=INFO_LABEL_FP)
             fig.canvas.draw(); x += t1.get_window_extent(renderer).width / fig.bbox.width
@@ -1765,16 +1758,35 @@ else:
                 fig.canvas.draw(); x += t3.get_window_extent(renderer).width / fig.bbox.width
 
     if not enable_images:
+        # single row (old behaviour)
+        single = [("Position: ",pos), ("Age: ",age)]
+        if show_height and height_text.strip(): single.append(("Height: ",height_text.strip()))
+        single += [("Foot: ",foot), ("Games: ",games), ("Minutes Played: ",minutes), ("Goals: ",goals), ("Assists: ",assists)]
         y_info = 1 - TOP - title_row_h + 0.010
-        draw_pairs_line(ordered_pairs, y_info)
+        draw_pairs_line(single, y_info)
     else:
-        # two rows: first 4, then next 4
-        first_line  = ordered_pairs[:4]
-        second_line = ordered_pairs[4:8]
-        y1 = 1 - TOP - (title_row_h * 0.46)  # slightly higher than before
+        # 3 rows when images are present:
+        # Row 1: Position, Age, Height
+        row1 = [("Position: ",pos), ("Age: ",age)]
+        if show_height and height_text.strip():
+            row1.append(("Height: ", height_text.strip()))
+        else:
+            row1.append(("Height: ", "—"))
+
+        # Row 2: Games, Goals, Assists
+        row2 = [("Games: ",games), ("Goals: ",goals), ("Assists: ",assists)]
+
+        # Row 3: Minutes Played, Foot
+        row3 = [("Minutes Played: ",minutes), ("Foot: ",foot)]
+
+        # Place rows **below** the images: compute from image bottom
+        img_bottom_y = 1 - TOP - 0.006 - img_box_h
+        y1 = img_bottom_y - 0.006     # a little gap below images
         y2 = y1 - 0.030
-        draw_pairs_line(first_line,  y1)
-        draw_pairs_line(second_line, y2)
+        y3 = y2 - 0.030
+        draw_pairs_line(row1, y1)
+        draw_pairs_line(row2, y2)
+        draw_pairs_line(row3, y3)
 
     # ===== Header images (only when enabled) =====
     def _open_upload(u):
@@ -1783,24 +1795,23 @@ else:
         except Exception: return None
 
     if enable_images:
-        # Keep rightmost fixed to the current position; others pack left with reduced gap.
         def add_header_image(pil_img, right_index=0):
             if pil_img is None: return
             x_right_edge = 1 - RIGHT
-            # right_index: 0 rightmost; 1 next left; etc.
+            # right_index: 0 = rightmost anchor; 1 and 2 move closer because of tiny img_gap
             x = x_right_edge - (right_index + 1) * img_box_w - right_index * img_gap
             y_top_band = 1 - TOP - 0.006
             y = y_top_band - img_box_h
             ax_img = fig.add_axes([x, y, img_box_w, img_box_h])
             ax_img.imshow(pil_img); ax_img.axis("off")
 
-        add_header_image(_open_upload(up_img1), right_index=0)
-        add_header_image(_open_upload(up_img2), right_index=1)
-        add_header_image(_open_upload(up_img3), right_index=2)
+        add_header_image(_open_upload(up_img1), right_index=0)  # rightmost (anchor)
+        add_header_image(_open_upload(up_img2), right_index=1)  # middle, closer to right
+        add_header_image(_open_upload(up_img3), right_index=2)  # leftmost, also closer
 
-    # Divider under header
+    # Divider under header (slightly lower when images are on)
     fig.lines.append(plt.Line2D([LEFT, 1 - RIGHT],
-                                [1 - TOP - header_block_h + 0.004]*2,
+                                [1 - TOP - header_block_h + (0.006 if enable_images else 0.004)]*2,
                                 transform=fig.transFigure, color=DIVIDER, lw=0.8, alpha=0.35))
 
     # ===== Panels =====
@@ -1872,12 +1883,13 @@ else:
     st.download_button(
         "⬇️ Download Feature Z (PNG)",
         data=buf.getvalue(),
-        file_name=f"{str(name).replace(' ','_')}_featureZ.png",
+        file_name=f"{str(name_).replace(' ','_')}_featureZ.png",
         mime="image/png",
         key=f"download_feature_z_{uuid.uuid4().hex}"
     )
     plt.close(fig)
 # ============================ END — Feature Z ============================
+
 
 
 
