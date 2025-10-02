@@ -1777,7 +1777,7 @@ else:
             x_right_edge = 1 - RIGHT
             x = x_right_edge - (right_index + 1) * img_box_w - right_index * img_gap
             # Nudge middle (index 1) and left (index 2) to the RIGHT
-            per_image_shift = {0: 0.05, 1: 0.1, 2: 0.2}  # tweak these values
+            per_image_shift = {0: 0.02, 1: 0.07, 2: 0.14}  # tweak these values
             x += per_image_shift.get(right_index, 0.0)
             y_top_band = 1 - TOP - 0.006
             y = y_top_band - img_box_h
