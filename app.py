@@ -1637,7 +1637,7 @@ INFO_LABEL_FP= FontProperties(family=FONT_BOOK_FAMILY,  weight='bold',     size=
 INFO_VALUE_FP= FontProperties(family=FONT_BOOK_FAMILY,  weight='regular',  size=10)
 BAR_VALUE_FP = FontProperties(family=FONT_BOOK_FAMILY,  weight='regular',  size=8)
 TICK_FP      = FontProperties(family=FONT_BOOK_FAMILY,  weight='medium',   size=10)
-FOOTER_FP    = FontProperties(family=FONT_BOOK_FAMILY,  weight='semibold', size=10)
+FOOTER_FP    = FontProperties(family=FONT_BOOK_FAMILY,  weight='medium', size=10)
 
 if player_row.empty:
     st.info("Pick a player above.")
