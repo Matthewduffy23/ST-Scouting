@@ -1847,10 +1847,20 @@ with st.expander("Scatter settings", expanded=False):
     allow_overlap = st.toggle("Allow overlapping labels (not recommended)", value=False, key="sc_overlap")
     label_size = st.slider("Label size", 8, 20, 13, 1, key="sc_lbl_sz")  # default = 13 (UPDATED)
 
+    # Visual aids
+    show_medians = st.checkbox("Show median reference lines", value=True, key="sc_medians")
+    shade_iqr = st.checkbox("Shade interquartile range (25–75%)", value=True, key="sc_iqr")
+
     # Points
     point_alpha = st.slider("Point opacity", 0.2, 1.0, 0.92, 0.02, key="sc_alpha")
     point_size = st.slider("Point size", 24, 300, 250, 2, key="sc_pts")  # default = 250 (UPDATED)
     marker = st.selectbox("Marker", ["o", "s", "^", "D"], index=0, key="sc_marker")
+
+    # Team highlight (based on selected preset/leagues)
+    teams_available_hl = sorted(df[df["League"].isin(leagues_scatter)]["Team"].dropna().unique().tolist())
+    team_highlight = st.selectbox(
+        "Highlight team (within selected leagues)", ["(None)"] + teams_available_hl, index=0, key="sc_team_hl"
+    )  # NEW
 
     # Ticks (Auto or manual)
     tick_mode = st.selectbox(
@@ -2057,6 +2067,17 @@ with st.expander("Scatter settings", expanded=False):
                         marker=marker, zorder=4
                     )
 
+                # Highlight team overlay
+                if team_highlight != "(None)":
+                    hl = pool_sc[pool_sc["Team"] == team_highlight]
+                    if not hl.empty:
+                        ax.scatter(
+                            hl[x_metric], hl[y_metric],
+                            s=point_size, c="#f59e0b",  # amber highlight
+                            alpha=1.0, edgecolors="white", linewidths=1.6,
+                            marker=marker, zorder=5
+                        )
+
                 # IQR & medians
                 if shade_iqr:
                     x_q1, x_q3 = np.nanpercentile(x_vals, [25, 75])
@@ -2083,9 +2104,7 @@ with st.expander("Scatter settings", expanded=False):
                 if show_labels:
                     candidates = others.copy()
                     if label_only_u23:
-                        # U23 = age < 23
                         candidates = candidates[pd.to_numeric(candidates["Age"], errors="coerce") < 23]
-
                     cx, cy = float(np.nanmedian(x_vals)), float(np.nanmedian(y_vals))
                     dist = (candidates[x_metric]-cx)**2 + (candidates[y_metric]-cy)**2
                     candidates = candidates.assign(_prio=-dist.values).sort_values("_prio")
@@ -2120,9 +2139,8 @@ with st.expander("Scatter settings", expanded=False):
                         pass
 
                 # ---------- Axes & grid ----------
-                # Axis label size 14 and semibold (UPDATED)
-                ax.set_xlabel(x_metric, fontsize=14, fontweight="semibold", color=txt_col)
-                ax.set_ylabel(y_metric, fontsize=14, fontweight="semibold", color=txt_col)
+                ax.set_xlabel(x_metric, fontsize=14, fontweight="semibold", color=txt_col)  # UPDATED
+                ax.set_ylabel(y_metric, fontsize=14, fontweight="semibold", color=txt_col)  # UPDATED
 
                 # Denser auto ticks (≈2×)
                 if tick_mode.startswith("Auto"):
@@ -2177,11 +2195,6 @@ with st.expander("Scatter settings", expanded=False):
     except Exception as e:
         st.info(f"Scatter could not be drawn: {e}")
 # ==========================================================================================================
-
-
-
-
-
 
 
 
