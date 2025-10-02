@@ -1843,16 +1843,13 @@ with st.expander("Scatter settings", expanded=False):
     # Selected player & labels
     include_selected = st.toggle("Include selected player", value=True, key="sc_include")
     show_labels = st.toggle("Show player labels", value=True, key="sc_labels_all")
+    label_only_u23 = st.checkbox("Label only U23 players", value=False, key="sc_lbl_u23")  # NEW
     allow_overlap = st.toggle("Allow overlapping labels (not recommended)", value=False, key="sc_overlap")
-    label_size = st.slider("Label size", 8, 20, 12, 1, key="sc_lbl_sz")  # default 12
-
-    # Visual aids
-    show_medians = st.checkbox("Show median reference lines", value=True, key="sc_medians")
-    shade_iqr = st.checkbox("Shade interquartile range (25–75%)", value=True, key="sc_iqr")
+    label_size = st.slider("Label size", 8, 20, 13, 1, key="sc_lbl_sz")  # default = 13 (UPDATED)
 
     # Points
     point_alpha = st.slider("Point opacity", 0.2, 1.0, 0.92, 0.02, key="sc_alpha")
-    point_size = st.slider("Point size", 24, 300, 200, 2, key="sc_pts")  # default 200
+    point_size = st.slider("Point size", 24, 300, 250, 2, key="sc_pts")  # default = 250 (UPDATED)
     marker = st.selectbox("Marker", ["o", "s", "^", "D"], index=0, key="sc_marker")
 
     # Ticks (Auto or manual)
@@ -1878,7 +1875,7 @@ with st.expander("Scatter settings", expanded=False):
         "All White",
         "All Black",
     ]
-    default_palette_index = palette_options.index("All Black")  # default to black palette
+    default_palette_index = palette_options.index("All Black")
     colour_metric = st.selectbox(
         "Colour dots by metric (scaled within pool)",
         [c for c in FEATURES if c in numeric_cols],
@@ -1891,9 +1888,14 @@ with st.expander("Scatter settings", expanded=False):
     # === Canvas & top gap & title ===
     canvas_preset = st.selectbox("Canvas size (px)", ["1280×720", "1600×900", "1920×820", "1920×1080"], index=1)
     w_px, h_px = map(int, canvas_preset.replace("×", "x").replace(" ", "").split("x"))
-    top_gap_px = st.slider("Top blank gap (px)", 0, 240, 100, 5)
+
     show_title = st.checkbox("Show custom title", value=False, key="sc_show_title")
     custom_title = st.text_input("Custom title", "xG per 90 vs Non-penalty goals per 90", key="sc_title")
+
+    # Top blank gap slider, but AUTO-SET to 75 when a custom title is shown
+    top_gap_px = st.slider("Top blank gap (px)", 0, 240, 100, 5, key="sc_topgap_slider")
+    if show_title:
+        top_gap_px = 75  # AUTO override when title enabled (NEW)
 
     # Exact-pixel render
     render_exact = st.checkbox("Render exact pixels (PNG)", value=True)
@@ -2080,6 +2082,10 @@ with st.expander("Scatter settings", expanded=False):
 
                 if show_labels:
                     candidates = others.copy()
+                    if label_only_u23:
+                        # U23 = age < 23
+                        candidates = candidates[pd.to_numeric(candidates["Age"], errors="coerce") < 23]
+
                     cx, cy = float(np.nanmedian(x_vals)), float(np.nanmedian(y_vals))
                     dist = (candidates[x_metric]-cx)**2 + (candidates[y_metric]-cy)**2
                     candidates = candidates.assign(_prio=-dist.values).sort_values("_prio")
@@ -2114,14 +2120,14 @@ with st.expander("Scatter settings", expanded=False):
                         pass
 
                 # ---------- Axes & grid ----------
-                # +1pt font and semibold on labels
-                ax.set_xlabel(x_metric, fontsize=13, fontweight="semibold", color=txt_col)
-                ax.set_ylabel(y_metric, fontsize=13, fontweight="semibold", color=txt_col)
+                # Axis label size 14 and semibold (UPDATED)
+                ax.set_xlabel(x_metric, fontsize=14, fontweight="semibold", color=txt_col)
+                ax.set_ylabel(y_metric, fontsize=14, fontweight="semibold", color=txt_col)
 
                 # Denser auto ticks (≈2×)
                 if tick_mode.startswith("Auto"):
-                    step_x = nice_step(*xlim, target_ticks=12)  # was 6
-                    step_y = nice_step(*ylim, target_ticks=12)  # was 6
+                    step_x = nice_step(*xlim, target_ticks=12)
+                    step_y = nice_step(*ylim, target_ticks=12)
                 else:
                     step_x = step_y = float(tick_mode)
 
@@ -2153,8 +2159,7 @@ with st.expander("Scatter settings", expanded=False):
                 # Optional title slightly lower within the gap
                 if show_title and custom_title.strip():
                     title_col = "#111111" if theme == "Light" else "#f5f5f5"
-                    # previously centered at 0.5 of gap; nudge down a bit to ~0.44
-                    y_gap_pos = top_frac + (1 - top_frac) * 0.44
+                    y_gap_pos = top_frac + (1 - top_frac) * 0.44  # slight nudge down
                     fig.text(
                         0.5, y_gap_pos, custom_title.strip(),
                         ha="center", va="center", color=title_col, fontsize=26, fontweight="semibold"
@@ -2172,6 +2177,7 @@ with st.expander("Scatter settings", expanded=False):
     except Exception as e:
         st.info(f"Scatter could not be drawn: {e}")
 # ==========================================================================================================
+
 
 
 
