@@ -1711,7 +1711,7 @@ else:
         header_block_h = title_row_h + 0.055   # unchanged
         # badges closer together & equal gaps
         img_box_w = img_box_h = 0.16
-        img_gap   = 0.0008     # smaller gap = closer; equal spacing
+        img_gap   = 0.0005    # smaller gap = closer; equal spacing
 
     GLOBAL_LEFT_PAD = 0.02
     BASE_LEFT, RIGHT = 0.035, 0.020
