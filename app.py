@@ -1566,7 +1566,7 @@ else:
 # ============================ END — Feature F ============================
 
 
-# ============================ (Z) THREE-PANEL PERCENTILE BOARD — safe headroom + tight, even badges ============================
+# ============================ (Z) THREE-PANEL PERCENTILE BOARD — info under title; tight, even right-anchored images ============================
 from io import BytesIO
 import uuid, numpy as np
 import matplotlib.pyplot as plt
@@ -1582,9 +1582,11 @@ st.header("📋 Feature Z — White Percentile Board")
 with st.expander("Feature Z options", expanded=False):
     enable_images = st.checkbox("Add header images", value=True)
     show_height   = st.checkbox("Show height in info row", value=True)
+    # Optional display-name override
     name_override_on = st.checkbox("Edit player display name", value=False)
     name_override    = st.text_input("Display name", "", disabled=not name_override_on)
 
+    # Height helper
     default_height = ""
     try:
         if not player_row.empty:
@@ -1597,17 +1599,20 @@ with st.expander("Feature Z options", expanded=False):
     footer_caption_text = st.text_input("Footer caption", "Percentile Rank")
 
     if enable_images:
-        st.caption("Upload up to three header images (PNG recommended). Rightmost is the anchor.")
-        up_img1 = st.file_uploader("Image 1 (rightmost)", type=["png","jpg","jpeg","webp"], key="fz_img1")
-        up_img2 = st.file_uploader("Image 2 (middle)",   type=["png","jpg","jpeg","webp"], key="fz_img2")
-        up_img3 = st.file_uploader("Image 3 (leftmost)", type=["png","jpg","jpeg","webp"], key="fz_img3")
+        st.caption("Upload up to three header images (PNG recommended). Rightmost image is the anchor.")
+        up_img1 = st.file_uploader("Image 1 (rightmost / anchor)", type=["png","jpg","jpeg","webp"], key="fz_img1")
+        up_img2 = st.file_uploader("Image 2 (middle)",            type=["png","jpg","jpeg","webp"], key="fz_img2")
+        up_img3 = st.file_uploader("Image 3 (leftmost)",          type=["png","jpg","jpeg","webp"], key="fz_img3")
     else:
         up_img1 = up_img2 = up_img3 = None
 
+# ----- helpers -----
 def _safe_get(df_or_series, key, default="—"):
     try:
-        if hasattr(df_or_series, "iloc"): v = df_or_series.iloc[0].get(key, default)
-        else:                              v = df_or_series.get(key, default)
+        if hasattr(df_or_series, "iloc"):
+            v = df_or_series.iloc[0].get(key, default)
+        else:
+            v = df_or_series.get(key, default)
         s = "" if v is None else str(v)
         return default if s.strip() == "" else s
     except Exception:
@@ -1619,6 +1624,7 @@ def _font_name_or_fallback(pref, fallback="DejaVu Sans"):
         if n in installed: return n
     return fallback
 
+# --- fonts ---
 FONT_TITLE_FAMILY = _font_name_or_fallback(["Tableau Bold","Tableau Sans Bold","Tableau"])
 FONT_BOOK_FAMILY  = _font_name_or_fallback(["Tableau Book","Tableau Sans","Tableau"])
 TITLE_FP     = FontProperties(family=FONT_TITLE_FAMILY, weight='bold',     size=22)
@@ -1633,6 +1639,7 @@ FOOTER_FP    = FontProperties(family=FONT_BOOK_FAMILY,  weight='semibold', size=
 if player_row.empty:
     st.info("Pick a player above.")
 else:
+    # -------- header fields --------
     pos   = _safe_get(player_row, "Position", "CM/DM/RW")
     name_ = _safe_get(player_row, "Player", _safe_get(player_row, "Name", "Kadeem Harris"))
     if name_override_on and name_override.strip(): name_ = name_override.strip()
@@ -1646,7 +1653,7 @@ else:
     assists = _safe_get(player_row, "Assists", "—")
     foot    = _safe_get(player_row, "Foot", _safe_get(player_row, "Preferred Foot", "—"))
 
-    # === sections (unchanged) ===
+    # ===== sections (unchanged) =====
     ATTACKING = []
     for lab, met in [
         ("Crosses","Crosses per 90"),
@@ -1691,27 +1698,32 @@ else:
     sections = [("Attacking",ATTACKING),("Defensive",DEFENSIVE),("Possession",POSSESSION)]
     sections = [(t,lst) for t,lst in sections if lst]
 
-    # === styling ===
+    # ===== styling =====
     PAGE_BG = "#ebebeb"; AX_BG = "#f3f3f3"; TRACK="#d6d6d6"
     TITLE_C="#111111"; LABEL_C="#222222"; DIVIDER="#000000"
     TAB_RED=np.array([199,54,60]); TAB_GOLD=np.array([240,197,106]); TAB_GREEN=np.array([61,166,91])
     def _blend(c1,c2,t): c=c1+(c2-c1)*np.clip(t,0,1); return f"#{int(c[0]):02x}{int(c[1]):02x}{int(c[2]):02x}"
     def pct_to_rgb(v): v=float(np.clip(v,0,100)); return _blend(TAB_RED,TAB_GOLD,v/50) if v<=50 else _blend(TAB_GOLD,TAB_GREEN,(v-50)/50)
 
-    # === layout (HEADROOM increased a touch; labels restored) ===
+    # ===== layout (images on: info under title; images lower; equal tight gaps) =====
     if not enable_images:
         fig_size   = (10, 8); dpi = 100
         title_row_h = 0.075
         header_block_h = title_row_h + 0.020
         img_box_w = img_box_h = 0.09; img_gap = 0.012
+        info_under_title = True
     else:
         fig_size   = (11.8, 9.6); dpi = 120
         title_row_h = 0.125
-        # ↑ add a bit more space so the panel never touches images
-        header_block_h = title_row_h + 0.055   # + ~2–3 mm vs previous
-        # badges closer together & equal gaps
+
+        # Place images noticeably **below** the title to leave room for info rows
+        y_top_band_offset = 0.085   # controls how far below the title the images start
         img_box_w = img_box_h = 0.15
-        img_gap   = 0.0015     # smaller gap = closer; equal spacing
+        img_gap   = 0.0012          # small, equal gaps -> badges sit closer together
+
+        # header block must include: gap under title + image height + a little padding
+        header_block_h = title_row_h + y_top_band_offset + img_box_h + 0.020
+        info_under_title = True
 
     GLOBAL_LEFT_PAD = 0.02
     BASE_LEFT, RIGHT = 0.035, 0.020
@@ -1729,11 +1741,11 @@ else:
     gutter = 0.215
     ticks = np.arange(0,101,10)
 
-    # --- title ---
+    # ===== title =====
     fig.text(LEFT + TITLE_LEFT_NUDGE, 1 - TOP - 0.010, f"{name_}\u2009|\u2009{team}",
              ha="left", va="top", color=TITLE_C, fontproperties=TITLE_FP)
 
-    # --- info rows (3 rows when images ON) ---
+    # ===== info rows DIRECTLY under title (and above the images) =====
     def draw_pairs_line(pairs_line, y):
         x = LEFT; sep = "  |  "; renderer = fig.canvas.get_renderer()
         for i,(lab,val) in enumerate(pairs_line):
@@ -1742,54 +1754,54 @@ else:
             t2 = fig.text(x, y, str(val), ha="left", va="top", color=LABEL_C, fontproperties=INFO_VALUE_FP)
             fig.canvas.draw(); x += t2.get_window_extent(renderer).width / fig.bbox.width
             if i != len(pairs_line)-1:
-                t3 = fig.text(x, y, "  |  ", ha="left", va="top", color="#555555", fontproperties=INFO_VALUE_FP)
+                t3 = fig.text(x, y, sep, ha="left", va="top", color="#555555", fontproperties=INFO_VALUE_FP)
                 fig.canvas.draw(); x += t3.get_window_extent(renderer).width / fig.bbox.width
 
-    if not enable_images:
-        pairs = [("Position: ",pos), ("Age: ",age)]
-        if show_height and height_text.strip(): pairs.append(("Height: ",height_text.strip()))
-        pairs += [("Foot: ",foot), ("Games: ",games), ("Minutes Played: ",minutes), ("Goals: ",goals), ("Assists: ",assists)]
-        draw_pairs_line(pairs, 1 - TOP - title_row_h + 0.010)
-    else:
+    if info_under_title:
+        # Order (3 rows): Row1 Position, Age, Height | Row2 Games, Goals, Assists | Row3 Minutes Played, Foot
         row1 = [("Position: ",pos), ("Age: ",age), ("Height: ", (height_text.strip() if (show_height and height_text.strip()) else "—"))]
         row2 = [("Games: ",games), ("Goals: ",goals), ("Assists: ",assists)]
         row3 = [("Minutes Played: ",minutes), ("Foot: ",foot)]
-        img_bottom_y = 1 - TOP - 0.006 - img_box_h
-        y1 = img_bottom_y - 0.006
-        y2 = y1 - 0.030
-        y3 = y2 - 0.030
+
+        y_title_baseline = 1 - TOP - 0.010
+        # Stack right beneath the title, with compact spacing
+        y1 = y_title_baseline - 0.030
+        y2 = y1 - 0.028
+        y3 = y2 - 0.028
         draw_pairs_line(row1, y1)
         draw_pairs_line(row2, y2)
         draw_pairs_line(row3, y3)
 
-    # --- images ---
+    # ===== images (right-anchored, equal tight gaps) =====
     def _open_upload(u):
         if u is None: return None
         try: return Image.open(u).convert("RGBA")
         except Exception: return None
 
     if enable_images:
-        def add_header_image(pil_img, right_index=0):
+        def add_header_image(pil_img, right_index=0, top_offset=0.0):
             if pil_img is None: return
             x_right_edge = 1 - RIGHT
+            # Equal spacing from the right: anchor -> middle -> left
             x = x_right_edge - (right_index + 1) * img_box_w - right_index * img_gap
-            y_top_band = 1 - TOP - 0.006
+            y_top_band = 1 - TOP - y_top_band_offset + top_offset
             y = y_top_band - img_box_h
             ax_img = fig.add_axes([x, y, img_box_w, img_box_h])
             ax_img.imshow(pil_img); ax_img.axis("off")
-        add_header_image(_open_upload(up_img1), right_index=0)
-        add_header_image(_open_upload(up_img2), right_index=1)
-        add_header_image(_open_upload(up_img3), right_index=2)
 
-    # --- divider a touch lower (headroom) ---
+        add_header_image(_open_upload(up_img1), right_index=0)  # rightmost (anchor)
+        add_header_image(_open_upload(up_img2), right_index=1)  # middle (closer to the anchor)
+        add_header_image(_open_upload(up_img3), right_index=2)  # leftmost (also closer)
+
+    # ===== divider (safe) =====
     fig.lines.append(plt.Line2D([LEFT, 1 - RIGHT],
                                 [1 - TOP - header_block_h + 0.004]*2,
                                 transform=fig.transFigure, color=DIVIDER, lw=0.8, alpha=0.35))
 
-    # --- panels (labels back to their original y offset) ---
+    # ===== panels (unchanged) =====
     def draw_panel(panel_top, title, tuples, *, show_xticks=False, draw_bottom_divider=True):
         n = len(tuples); panel_h = header_h + n*row_slot
-        fig.text(LEFT, panel_top - 0.012, title, ha="left", va="top", color=TITLE_C, fontproperties=H2_FP)  # unchanged offset
+        fig.text(LEFT, panel_top - 0.012, title, ha="left", va="top", color=TITLE_C, fontproperties=H2_FP)
 
         ax = fig.add_axes([LEFT + gutter, panel_top - header_h - n*row_slot, 1 - LEFT - RIGHT - gutter, n*row_slot])
         ax.set_facecolor(AX_BG); ax.set_xlim(0,100); ax.set_ylim(-0.5,n-0.5)
@@ -1798,14 +1810,23 @@ else:
         ax.tick_params(axis="y", left=False,  labelleft=False,  length=0)
         ax.set_yticks([]); ax.get_yaxis().set_visible(False)
 
+        # tracks
         for i in range(n):
             ax.add_patch(plt.Rectangle((0, i-(BAR_FRAC/2)), 100, BAR_FRAC, color=TRACK, ec="none", zorder=0.5))
         for gx in ticks:
             ax.vlines(gx, -0.5, n-0.5, colors=(0,0,0,0.16), linewidth=0.8, zorder=0.75)
 
+        # bars + values
+        def _blend(c1,c2,t): c=c1+(c2-c1)*np.clip(t,0,1); return f"#{int(c[0]):02x}{int(c[1]):02x}{int(c[2]):02x}"
+        def pct_to_rgb(v): v=float(np.clip(v,0,100)); 
         for i,(lab,pct,val_str) in enumerate(tuples[::-1]):
             y = i; bar_w = float(np.clip(pct,0,100))
-            ax.add_patch(plt.Rectangle((0, y-(BAR_FRAC/2)), bar_w, BAR_FRAC, color=pct_to_rgb(bar_w), ec="none", zorder=1.0))
+            # color
+            if bar_w <= 50:
+                col = _blend(np.array([199,54,60]), np.array([240,197,106]), bar_w/50.0)
+            else:
+                col = _blend(np.array([240,197,106]), np.array([61,166,91]), (bar_w-50.0)/50.0)
+            ax.add_patch(plt.Rectangle((0, y-(BAR_FRAC/2)), bar_w, BAR_FRAC, color=col, ec="none", zorder=1.0))
             x_text = 1.0 if bar_w >= 3 else min(100.0, bar_w + 0.8)
             ax.text(x_text, y, val_str, ha="left", va="center", color="#0B0B0B", fontproperties=BAR_VALUE_FP, zorder=2.0, clip_on=False)
 
@@ -1838,11 +1859,13 @@ else:
         is_last = idx == len(sections)-1
         y_top = draw_panel(y_top, title, data, show_xticks=is_last, draw_bottom_divider=not is_last)
 
+    # footer
     fig.text((LEFT + gutter + (1 - RIGHT))/2.0, BOT * 0.1, footer_caption_text,
              ha="center", va="center", color=LABEL_C, fontproperties=FOOTER_FP)
 
     st.pyplot(fig, use_container_width=True)
 
+    # download
     buf = BytesIO(); fig.savefig(buf, format="png", dpi=(150 if enable_images else 130),
                                  bbox_inches="tight", facecolor=fig.get_facecolor())
     buf.seek(0)
@@ -1855,6 +1878,7 @@ else:
     )
     plt.close(fig)
 # ============================ END — Feature Z ============================
+
 
 
 
