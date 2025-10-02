@@ -368,7 +368,7 @@ for role, role_def in ROLES.items():
         st.dataframe(top_table(filtered_view(df_f, value_max=v_max), role, int(top_n)), use_container_width=True)
         st.divider()
 
-# ----------------- METRIC LEADERBOARD — themed + palettes + custom title + highlights -----------------
+# ----------------- METRIC LEADERBOARD — themed + palettes + custom title + highlights (FINAL) -----------------
 import re, numpy as np, matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 from matplotlib import rcParams, font_manager as fm
@@ -450,7 +450,6 @@ teams  = plot_df["Team"].astype(str).tolist()
 vals   = plot_df[val_col].astype(float).values if len(plot_df) else np.array([0.0])
 
 # --- Colour mapping (same logic as scatterplot)
-import numpy as np
 def interp(a, b, u):
     a = np.array(a, dtype=float); b = np.array(b, dtype=float)
     return (a + (b - a) * np.clip(u, 0, 1)) / 255.0
@@ -490,10 +489,10 @@ fig, ax = plt.subplots(figsize=(11.5, 6.2))
 fig.patch.set_facecolor(PAGE_BG)
 ax.set_facecolor(PLOT_BG)
 
-# Title (2× font size)
+# Title (slightly smaller now: 30 instead of 32)
 default_title = f"Top {len(plot_df)} – {metric_pick}"
 title_text = custom_title.strip() if (show_title and custom_title.strip()) else default_title
-fig.suptitle(title_text, fontsize=32, fontweight="bold", color=TXT, y=0.985)  # 32 (was 16)
+fig.suptitle(title_text, fontsize=30, fontweight="bold", color=TXT, y=0.985)
 
 # Layout
 plt.subplots_adjust(top=0.90, left=0.30, right=0.965, bottom=0.14)
@@ -502,7 +501,7 @@ plt.subplots_adjust(top=0.90, left=0.30, right=0.965, bottom=0.14)
 ypos = np.arange(len(vals))
 bars = ax.barh(ypos, vals, color=bar_colors, edgecolor="none", zorder=2)
 
-# Highlight a single player (amber, white edge)
+# Highlight a single player
 if highlight_player and highlight_player != "(None)":
     mask = plot_df["Player"].astype(str) == highlight_player
     if mask.any():
@@ -516,11 +515,10 @@ if highlight_player and highlight_player != "(None)":
 # Axes & labels
 ax.invert_yaxis()
 ax.set_yticks(ypos)
-# We'll use custom tick labels with mathtext so only the player is semibold
 yticklabels_math = [rf'$\bf{{{p}}}$, {t}' for p, t in zip(p_abbr, teams)]
-ax.set_yticklabels(yticklabels_math, fontsize=10.5, color=TXT)  # player part is bold via mathtext
+ax.set_yticklabels(yticklabels_math, fontsize=10.5, color=TXT)
 ax.set_ylabel("")
-ax.set_xlabel(val_col, color=TXT, labelpad=6, fontsize=10.5, fontweight="semibold")  # semibold axis label
+ax.set_xlabel(val_col, color=TXT, labelpad=6, fontsize=10.5, fontweight="semibold")
 
 # Gridlines
 ax.grid(axis="x", color=GRID_MAJ, linewidth=0.8, zorder=1)
@@ -530,19 +528,19 @@ for side in ["top","right","left"]:
     ax.spines[side].set_visible(False)
 ax.spines["bottom"].set_color(SPINE)
 ax.tick_params(axis="y", length=0)
-ax.tick_params(axis="x", labelsize=9.5, colors=TICK)
 
-# X ticks formatting and weight (medium)
+# X ticks formatting + white medium font
 def fmt(x, _): return f"{x:,.0f}" if float(x).is_integer() else f"{x:,.2f}"
 ax.xaxis.set_major_formatter(FuncFormatter(fmt))
 for tick in ax.get_xticklabels():
-    tick.set_fontweight("medium")  # medium weight for tick values
+    tick.set_fontweight("medium")
+    tick.set_color("#ffffff")  # POP white tick labels
 
 # Range & padding
 xmax = float(vals.max()) if len(vals) else 1.0
 ax.set_xlim(0, xmax * 1.1)
 
-# Value labels (1 pt smaller than before → 8.5)
+# Value labels (still smaller: 8.5)
 pad = (ax.get_xlim()[1] - ax.get_xlim()[0]) * 0.012
 for rect, v in zip(bars, vals):
     ax.text(rect.get_width() + pad,
