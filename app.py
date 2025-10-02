@@ -1776,6 +1776,9 @@ else:
             if pil_img is None: return
             x_right_edge = 1 - RIGHT
             x = x_right_edge - (right_index + 1) * img_box_w - right_index * img_gap
+            # Nudge middle (index 1) and left (index 2) to the RIGHT
+            per_image_shift = {0: 0.00, 1: 0.010, 2: 0.020}  # tweak these values
+            x += per_image_shift.get(right_index, 0.0)
             y_top_band = 1 - TOP - 0.006
             y = y_top_band - img_box_h
             ax_img = fig.add_axes([x, y, img_box_w, img_box_h])
