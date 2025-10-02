@@ -2303,18 +2303,15 @@ with st.expander("Scatter settings", expanded=False):
 
 
 
-
-
-
-# ----------------- (B) COMPARISON RADAR — universal position_filter, A fixed, B any league -----------------
+# ----------------- (B) COMPARISON RADAR — decile tick values + light/dark theme -----------------
 st.markdown("---")
 st.header("📊 Player Comparison Radar")
 
 DEFAULT_RADAR_METRICS = [
-        "Non-penalty goals per 90","xG per 90","Shots per 90",
-        "Dribbles per 90","Successful dribbles, %","Touches in box per 90",
-        "Aerial duels per 90","Aerial duels won, %","Passes per 90",
-        "Accurate passes, %","xA per 90"
+    "Non-penalty goals per 90","xG per 90","Shots per 90",
+    "Dribbles per 90","Successful dribbles, %","Touches in box per 90",
+    "Aerial duels per 90","Aerial duels won, %","Passes per 90",
+    "Accurate passes, %","xA per 90"
 ]
 
 def _clean_radar_label(s: str) -> str:
@@ -2325,6 +2322,28 @@ def _clean_radar_label(s: str) -> str:
     s = s.replace("Successful dribbles, %", "Dribble %").replace("Accurate passes, %", "Pass %")
     return re.sub(r"\s*per\s*90", "", s, flags=re.I)
 
+# Theme
+with st.expander("Radar settings", expanded=False):
+    radar_theme = st.radio("Theme", ["Light", "Dark"], index=0, horizontal=True, key="radar_theme")
+
+# Colors per theme
+if radar_theme == "Dark":
+    PAGE_BG = AX_BG = "#0a0f1c"
+    GRID_BAND_A = "#111828"  # slightly lighter than bg
+    GRID_BAND_B = "#0d1524"
+    RING_COLOR  = "#3a4050"
+    LABEL_COLOR = "#f5f5f5"   # metric labels
+    TICK_COLOR  = "#e5e7eb"   # ring number labels
+    MINUTES_CLR = "#f5f5f5"
+else:
+    PAGE_BG = AX_BG = "#ebebeb"
+    GRID_BAND_A = "#ffffff"
+    GRID_BAND_B = "#e5e7eb"
+    RING_COLOR  = "#d1d5db"
+    LABEL_COLOR = "#0f172a"
+    TICK_COLOR  = "#6b7280"
+    MINUTES_CLR = "#374151"
+
 if player_row.empty:
     st.info("Pick a player above to draw the radar.")
 else:
@@ -2334,18 +2353,16 @@ else:
     if rowA_all.empty:
         st.info("Selected player not found in dataset.")
     else:
-        # Use the first occurrence if duplicates exist
         rowA = rowA_all.iloc[0]
 
-        # Build Player B list using the SAME universal position_filter used elsewhere
+        # Player B options using the universal position_filter
         pool_pos = df[df["Position"].astype(str).apply(position_filter)].copy()
         players_b = sorted(pool_pos["Player"].dropna().unique().tolist())
-        players_b = [p for p in players_b if p != pA]  # exclude A
+        players_b = [p for p in players_b if p != pA]
 
         if not players_b:
             st.info("No comparison players available for the current universal position filter.")
         else:
-            # Default B = first option (stable); user can change via dropdown
             pB = st.selectbox("Player B (blue)", players_b, index=0, key="radar_pb")
 
             rowB_all = df[df["Player"] == pB]
@@ -2354,20 +2371,19 @@ else:
             else:
                 rowB = rowB_all.iloc[0]
 
-                # Radar metrics that actually exist and are numeric
+                # Numeric radar metrics
                 numeric_cols = set(df.select_dtypes(include="number").columns.tolist())
                 radar_metrics = [m for m in DEFAULT_RADAR_METRICS if m in df.columns and m in numeric_cols]
                 if not radar_metrics:
                     st.info("No numeric radar metrics available in dataset.")
                 else:
-                    # Pooled comparison set: A∪B leagues, filtered by the same universal position_filter
+                    # Pool = A∪B leagues, same universal position filter
                     union_leagues = {rowA["League"], rowB["League"]}
                     pool = df[
                         (df["League"].isin(union_leagues)) &
                         (df["Position"].astype(str).apply(position_filter))
                     ].copy()
 
-                    # Numeric conversion + drop rows missing any radar metric
                     for m in radar_metrics:
                         pool[m] = pd.to_numeric(pool[m], errors="coerce")
                     pool = pool.dropna(subset=radar_metrics + ["Player"])
@@ -2375,37 +2391,43 @@ else:
                     if pool.empty:
                         st.info("No players in the combined A∪B league pool after applying the universal position filter.")
                     else:
-                        # Percentiles vs the A∪B pool
+                        # Percentiles for A & B vs pool (0–100 scale)
                         pool_pct = pool[radar_metrics].rank(pct=True) * 100.0
 
                         def pct_for(name: str) -> np.ndarray:
                             idx = pool[pool["Player"] == name].index
                             if len(idx) == 0:
                                 return np.full(len(radar_metrics), np.nan)
-                            # Average if multiple rows for a player exist
                             return pool_pct.loc[idx, :].mean(axis=0).values
 
                         A_r = pct_for(pA)
                         B_r = pct_for(pB)
 
-                        # Labels & tick scaffolding (visual only)
+                        # Labels
                         labels = [_clean_radar_label(m) for m in radar_metrics]
-                        axis_min = pool[radar_metrics].min().values
-                        axis_max = pool[radar_metrics].max().values
-                        pad = (axis_max - axis_min) * 0.07
-                        axis_min = axis_min - pad
-                        axis_max = axis_max + pad
-                        axis_ticks = [np.linspace(axis_min[i], axis_max[i], 11) for i in range(len(labels))]
+
+                        # === TRUE decile tick values (dataset values at 0,10,...,100th percentiles) ===
+                        qs = np.linspace(0, 100, 11)
+                        axis_ticks = [np.nanpercentile(pool[m].values, qs) for m in radar_metrics]
 
                         # ---- draw radar ----
                         COL_A = "#C81E1E"; COL_B = "#1D4ED8"
                         FILL_A = (200/255, 30/255, 30/255, 0.60)
                         FILL_B = (29/255, 78/255, 216/255, 0.60)
-                        PAGE_BG = AX_BG = "#FFFFFF"
-                        GRID_BAND_A = "#FFFFFF"; GRID_BAND_B = "#E5E7EB"
-                        RING_COLOR = "#D1D5DB"; RING_LW = 1.0
-                        LABEL_COLOR = "#0F172A"; TITLE_FS = 26; SUB_FS = 12; AXIS_FS = 10
-                        TICK_FS = 7; TICK_COLOR = "#9CA3AF"; INNER_HOLE = 10
+                        RING_LW = 1.0
+                        TITLE_FS = 26; SUB_FS = 12; AXIS_FS = 10
+                        TICK_FS = 7; INNER_HOLE = 10
+
+                        from matplotlib.patches import Wedge, Circle
+                        import matplotlib.pyplot as plt
+                        import numpy as np
+                        import pandas as pd
+
+                        def fmt_val(x: float) -> str:
+                            # neat value formatting for tick numbers
+                            if abs(x) >= 1:
+                                return f"{x:.2f}".rstrip("0").rstrip(".")
+                            return f"{x:.2f}"
 
                         def draw_radar(labels, A_r, B_r, ticks, headerA, subA, headerB, subB):
                             N = len(labels)
@@ -2418,48 +2440,53 @@ else:
                             fig.patch.set_facecolor(PAGE_BG)
                             ax = plt.subplot(111, polar=True); ax.set_facecolor(AX_BG)
                             ax.set_theta_offset(np.pi/2); ax.set_theta_direction(-1)
-                            ax.set_xticks(theta); ax.set_xticklabels(labels, fontsize=AXIS_FS, color=LABEL_COLOR, fontweight=600)
+                            ax.set_xticks(theta)
+                            ax.set_xticklabels(labels, fontsize=AXIS_FS, color=LABEL_COLOR, fontweight=600)
                             ax.set_yticks([]); ax.grid(False); [s.set_visible(False) for s in ax.spines.values()]
 
-                            # radial bands
+                            # radial bands (10 bands from INNER_HOLE to 100)
+                            ring_edges = np.linspace(INNER_HOLE, 100, 11)
                             for i in range(10):
-                                r0, r1 = np.linspace(INNER_HOLE,100,11)[i], np.linspace(INNER_HOLE,100,11)[i+1]
+                                r0, r1 = ring_edges[i], ring_edges[i+1]
                                 band = GRID_BAND_A if i % 2 == 0 else GRID_BAND_B
                                 ax.add_artist(Wedge((0,0), r1, 0, 360, width=(r1-r0),
                                                     transform=ax.transData._b, facecolor=band,
                                                     edgecolor="none", zorder=0.8))
+                            # ring outlines
                             ring_t = np.linspace(0, 2*np.pi, 361)
-                            for r in np.linspace(INNER_HOLE,100,11):
+                            for r in ring_edges:
                                 ax.plot(ring_t, np.full_like(ring_t, r), color=RING_COLOR, lw=RING_LW, zorder=0.9)
 
-                            # numeric axis tick labels around rings — light & small
-                            start_idx = 2
+                            # numeric tick labels at each ring = TRUE dataset quantiles
+                            start_idx = 2  # show from 20th to reduce clutter
                             for i, ang in enumerate(theta):
-                                vals = ticks[i][start_idx:]
-                                for rr, v in zip(np.linspace(INNER_HOLE,100,11)[start_idx:], vals):
-                                    ax.text(ang, rr-1.8, f"{v:.1f}", ha="center", va="center",
+                                vals = ticks[i]  # 11 values (0..100th)
+                                for rr, v in zip(ring_edges[start_idx:], vals[start_idx:]):
+                                    ax.text(ang, rr-1.8, fmt_val(float(v)),
+                                            ha="center", va="center",
                                             fontsize=TICK_FS, color=TICK_COLOR, zorder=1.1)
+                            # center hole
                             ax.add_artist(Circle((0,0), radius=INNER_HOLE-0.6, transform=ax.transData._b,
                                                  color=PAGE_BG, zorder=1.2, ec="none"))
 
-                            # A & B polygons
+                            # A & B polygons (percentile radii)
                             ax.plot(theta_c, Ar, color=COL_A, lw=2.2, zorder=3)
                             ax.fill(theta_c, Ar, color=FILL_A, zorder=2.5)
                             ax.plot(theta_c, Br, color=COL_B, lw=2.2, zorder=3)
                             ax.fill(theta_c, Br, color=FILL_B, zorder=2.5)
                             ax.set_rlim(0, 105)
 
-                            # headers (teams / leagues)
+                            # headers (teams / leagues / minutes)
                             minsA = f"{int(pd.to_numeric(rowA.get('Minutes played',0))):,} mins" if pd.notna(rowA.get('Minutes played')) else "Minutes: N/A"
                             minsB = f"{int(pd.to_numeric(rowB.get('Minutes played',0))):,} mins" if pd.notna(rowB.get('Minutes played')) else "Minutes: N/A"
 
                             fig.text(0.12, 0.96,  headerA, color=COL_A, fontsize=TITLE_FS, fontweight="bold", ha="left")
                             fig.text(0.12, 0.935, subA, color=COL_A, fontsize=SUB_FS, ha="left")
-                            fig.text(0.12, 0.915, minsA, color="#374151", fontsize=10, ha="left")
+                            fig.text(0.12, 0.915, minsA, color=MINUTES_CLR, fontsize=10, ha="left")
 
                             fig.text(0.88, 0.96,  headerB, color=COL_B, fontsize=TITLE_FS, fontweight="bold", ha="right")
                             fig.text(0.88, 0.935, subB, color=COL_B, fontsize=SUB_FS, ha="right")
-                            fig.text(0.88, 0.915, minsB, color="#374151", fontsize=10, ha="right")
+                            fig.text(0.88, 0.915, minsB, color=MINUTES_CLR, fontsize=10, ha="right")
                             return fig
 
                         fig_r = draw_radar(
@@ -2468,11 +2495,12 @@ else:
                             headerB=pB, subB=f"{rowB['Team']} — {rowB['League']}",
                         )
                         st.caption(
-                            "Percentiles are computed against the **combined A∪B league pool**, "
-                            "filtered by your universal **position_filter** (e.g., LB/LWB/RWB/RB families)."
+                            "Ring labels show the **actual dataset values** at each decile (0–100th) for every metric. "
+                            "Percentile shapes are computed against the **combined A∪B league pool** with your universal position filter."
                         )
                         st.pyplot(fig_r, use_container_width=True)
 # ----------------- END Radar -----------------
+
 
 
 
