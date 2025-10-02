@@ -368,12 +368,11 @@ for role, role_def in ROLES.items():
         st.dataframe(top_table(filtered_view(df_f, value_max=v_max), role, int(top_n)), use_container_width=True)
         st.divider()
 
-# ----------------- METRIC LEADERBOARD — themed + palettes + custom title + highlights (FINAL) -----------------
+# ----------------- METRIC LEADERBOARD — themed + palettes + custom title + highlights (UPDATED) -----------------
 import re, numpy as np, matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 from matplotlib import rcParams, font_manager as fm
 import pandas as pd
-import matplotlib as mpl
 import streamlit as st
 
 # --- Rendering crispness & font setup
@@ -396,16 +395,24 @@ with st.expander("Leaderboard settings", expanded=False):
     metric_pick   = st.selectbox("Metric", FEATURES, index=FEATURES.index(default_metric))
     top_n         = st.slider("Top N", 5, 40, 20, 5)
 
-    # Theme (match scatterplot)
+    # Theme (backgrounds must be identical for page & plot)
     theme = st.radio("Theme", ["Light", "Dark"], index=0, horizontal=True, key="lb_theme")
-    PAGE_BG = "#ebebeb" if theme == "Light" else "#0a0f1c"
-    PLOT_BG = "#f3f3f3" if theme == "Light" else "#0f151f"
-    GRID_MAJ = "#d7d7d7" if theme == "Light" else "#3a4050"
-    TXT      = "#111111" if theme == "Light" else "#f5f5f5"
-    TICK     = "#374151" if theme == "Light" else "#d1d5db"
-    SPINE    = "#d1d5db" if theme == "Light" else "#6b7280"
+    if theme == "Light":
+        PAGE_BG = "#ebebeb"
+        PLOT_BG = "#ebebeb"  # same as page per request
+        GRID_MAJ = "#d7d7d7"
+        TXT      = "#111111"
+        TICK_NUM = "#111111"  # axis numbers (ticks)
+        SPINE    = "#c8c8c8"
+    else:
+        PAGE_BG = "#0a0f1c"
+        PLOT_BG = "#0a0f1c"  # same as page per request
+        GRID_MAJ = "#3a4050"
+        TXT      = "#f5f5f5"
+        TICK_NUM = "#ffffff"  # axis numbers (ticks)
+        SPINE    = "#6b7280"
 
-    # Palette options (same as scatterplot)
+    # Palette options (same set as scatterplot + new uniform red/blue/green)
     palette_options = [
         "Red–Gold–Green (diverging)",
         "Light-grey → Black",
@@ -415,9 +422,15 @@ with st.expander("Leaderboard settings", expanded=False):
         "Purple ↔ Gold (diverging)",
         "All White",
         "All Black",
+        "All Red",    # NEW
+        "All Blue",   # NEW
+        "All Green",  # NEW
     ]
     palette_choice = st.selectbox("Palette", palette_options, index=palette_options.index("All Black"), key="lb_palette")
     reverse_scale  = st.checkbox("Reverse colours", value=False, key="lb_reverse")
+
+    # Labels
+    show_team_names = st.checkbox("Show team names", value=True, key="lb_show_team")  # NEW
 
     # Custom title
     show_title   = st.checkbox("Show custom title", value=False, key="lb_show_title")
@@ -449,7 +462,7 @@ p_abbr = [abbrev_name(p) for p in plot_df["Player"]]
 teams  = plot_df["Team"].astype(str).tolist()
 vals   = plot_df[val_col].astype(float).values if len(plot_df) else np.array([0.0])
 
-# --- Colour mapping (same logic as scatterplot)
+# --- Colour mapping (same logic as scatterplot, plus uniform colours)
 def interp(a, b, u):
     a = np.array(a, dtype=float); b = np.array(b, dtype=float)
     return (a + (b - a) * np.clip(u, 0, 1)) / 255.0
@@ -471,7 +484,15 @@ def color_mapper(palette, t):
         return interp(purple, mid, t/0.5) if t <= 0.5 else interp(mid, gold, (t-0.5)/0.5)
     if palette == "All White":
         return np.array([255,255,255])/255.0
-    return np.array([0,0,0])/255.0  # "All Black"
+    if palette == "All Black":
+        return np.array([0,0,0])/255.0
+    if palette == "All Red":
+        return np.array([197, 30, 30])/255.0
+    if palette == "All Blue":
+        return np.array([15, 70, 180])/255.0
+    if palette == "All Green":
+        return np.array([20, 120, 60])/255.0
+    return np.array([0,0,0])/255.0
 
 if len(vals) > 1:
     vmin, vmax = float(vals.min()), float(vals.max())
@@ -482,6 +503,7 @@ else:
 
 if reverse_scale:
     ts = 1.0 - ts
+# Build colors (handles both gradients and uniform)
 bar_colors = [tuple(color_mapper(palette_choice, float(t))) for t in ts]
 
 # --- Figure
@@ -489,10 +511,10 @@ fig, ax = plt.subplots(figsize=(11.5, 6.2))
 fig.patch.set_facecolor(PAGE_BG)
 ax.set_facecolor(PLOT_BG)
 
-# Title (slightly smaller now: 30 instead of 32)
+# Title (reduce by 4 pts → 26)
 default_title = f"Top {len(plot_df)} – {metric_pick}"
 title_text = custom_title.strip() if (show_title and custom_title.strip()) else default_title
-fig.suptitle(title_text, fontsize=30, fontweight="bold", color=TXT, y=0.985)
+fig.suptitle(title_text, fontsize=26, fontweight="bold", color=TXT, y=0.985)
 
 # Layout
 plt.subplots_adjust(top=0.90, left=0.30, right=0.965, bottom=0.14)
@@ -512,10 +534,13 @@ if highlight_player and highlight_player != "(None)":
             bars[i].set_linewidth(1.6)
             bars[i].set_zorder(5)
 
-# Axes & labels
+# Axis & labels
 ax.invert_yaxis()
 ax.set_yticks(ypos)
-yticklabels_math = [rf'$\bf{{{p}}}$, {t}' for p, t in zip(p_abbr, teams)]
+if show_team_names:
+    yticklabels_math = [rf'$\bf{{{p}}}$, {t}' for p, t in zip(p_abbr, teams)]
+else:
+    yticklabels_math = [rf'$\bf{{{p}}}$' for p in p_abbr]
 ax.set_yticklabels(yticklabels_math, fontsize=10.5, color=TXT)
 ax.set_ylabel("")
 ax.set_xlabel(val_col, color=TXT, labelpad=6, fontsize=10.5, fontweight="semibold")
@@ -529,18 +554,18 @@ for side in ["top","right","left"]:
 ax.spines["bottom"].set_color(SPINE)
 ax.tick_params(axis="y", length=0)
 
-# X ticks formatting + white medium font
+# X ticks formatting + themed colour + medium weight
 def fmt(x, _): return f"{x:,.0f}" if float(x).is_integer() else f"{x:,.2f}"
 ax.xaxis.set_major_formatter(FuncFormatter(fmt))
 for tick in ax.get_xticklabels():
     tick.set_fontweight("medium")
-    tick.set_color("#ffffff")  # POP white tick labels
+    tick.set_color(TICK_NUM)  # black on light, white on dark
 
 # Range & padding
 xmax = float(vals.max()) if len(vals) else 1.0
 ax.set_xlim(0, xmax * 1.1)
 
-# Value labels (still smaller: 8.5)
+# Value labels (8.5 pt beside bars)
 pad = (ax.get_xlim()[1] - ax.get_xlim()[0]) * 0.012
 for rect, v in zip(bars, vals):
     ax.text(rect.get_width() + pad,
