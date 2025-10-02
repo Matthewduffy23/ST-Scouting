@@ -1566,7 +1566,7 @@ else:
 # ============================ END — Feature F ============================
 
 
-# ============================ (Z) THREE-PANEL PERCENTILE BOARD — light theme + in-figure header ============================
+# ============================ (Z) THREE-PANEL PERCENTILE BOARD — light theme + header images + height + custom footer ============================
 from io import BytesIO
 import uuid
 import numpy as np
@@ -1574,10 +1574,35 @@ import matplotlib.pyplot as plt
 from matplotlib.transforms import ScaledTranslation
 from matplotlib import font_manager as fm
 from matplotlib.font_manager import FontProperties
+from matplotlib.patches import Circle
+from PIL import Image
 import streamlit as st
 
 st.markdown("---")
 st.header("📋 Feature Z — White Percentile Board")
+
+# ---------- controls ----------
+with st.expander("Feature Z options", expanded=False):
+    show_height = st.checkbox("Show height in info row", value=True, help="Adds Height next to Foot.")
+    # Try to read a height-like field if it exists; you can overwrite below
+    default_height = ""
+    try:
+        if not player_row.empty:
+            # Try common column names
+            for col in ["Height", "Height (ft)", "Height ft", "Height (cm)"]:
+                if col in player_row.columns and str(player_row.iloc[0][col]).strip():
+                    default_height = str(player_row.iloc[0][col]).strip()
+                    break
+    except Exception:
+        pass
+    height_text = st.text_input("Height value (e.g., 6'2\")", default_height)
+
+    footer_caption_text = st.text_input("Footer caption", "Percentile Rank")
+
+    st.caption("Top-right images (optional). Recommended transparent PNGs.")
+    up_img1 = st.file_uploader("Image 1 (rightmost)", type=["png","jpg","jpeg","webp"], key="fz_img1")
+    up_img2 = st.file_uploader("Image 2", type=["png","jpg","jpeg","webp"], key="fz_img2")
+    up_img3 = st.file_uploader("Image 3 (leftmost)", type=["png","jpg","jpeg","webp"], key="fz_img3")
 
 # ---------- helpers ----------
 def _safe_get(df_or_series, key, default="—"):
@@ -1611,7 +1636,7 @@ INFO_VALUE_FP = FontProperties(family=FONT_BOOK_FAMILY, weight='regular',  size=
 
 BAR_VALUE_FP = FontProperties(family=FONT_BOOK_FAMILY, weight='regular',   size=8)   # numbers inside bars
 TICK_FP      = FontProperties(family=FONT_BOOK_FAMILY, weight='medium',    size=10)  # bottom tick numbers
-FOOTER_FP    = FontProperties(family=FONT_BOOK_FAMILY, weight='semibold',  size=10)  # "Percentile Rank"
+FOOTER_FP    = FontProperties(family=FONT_BOOK_FAMILY, weight='semibold',  size=10)  # footer caption
 
 if player_row.empty:
     st.info("Pick a player above.")
@@ -1752,6 +1777,9 @@ else:
             ("Assists: ",  assists),
             ("Foot: ",     foot),
         ]
+        if show_height and height_text.strip():
+            pairs.append(("Height: ", height_text.strip()))
+
         sep = "  |  "
         renderer = fig.canvas.get_renderer()
         for i, (lab, val) in enumerate(pairs):
@@ -1768,6 +1796,41 @@ else:
                 fig.canvas.draw(); bb3 = t3.get_window_extent(renderer=renderer)
                 x += (bb3.width / fig.bbox.width)
     draw_info_pairs()
+
+    # ===== Top-right images (round badges) =====
+    def add_round_image(pil_img, right_index=0, diameter=0.085, gap=0.012, border_color="#ffffff", border_width=2):
+        """
+        right_index: 0 -> rightmost, 1 -> next left, etc.
+        diameter: width/height of the circular badge in figure coords
+        """
+        if pil_img is None:
+            return
+        # Compute figure coordinates
+        x_right_edge = 1 - RIGHT
+        x = x_right_edge - (right_index + 1) * diameter - right_index * gap
+        y = 1 - TOP - diameter + 0.006  # vertically within title band
+        ax_img = fig.add_axes([x, y, diameter, diameter])
+        ax_img.imshow(pil_img)
+        ax_img.axis("off")
+        # Circular clip
+        circ = Circle((0.5, 0.5), 0.5, transform=ax_img.transAxes, fill=False)
+        ax_img.set_clip_path(circ)
+        # Border ring
+        ax_img.add_patch(Circle((0.5, 0.5), 0.5, transform=ax_img.transAxes,
+                                fill=False, ec=border_color, lw=border_width, zorder=3))
+
+    def _open_upload(u):
+        if u is None:
+            return None
+        try:
+            return Image.open(u).convert("RGBA")
+        except Exception:
+            return None
+
+    # Rightmost first, then move left
+    add_round_image(_open_upload(up_img1), right_index=0)
+    add_round_image(_open_upload(up_img2), right_index=1)
+    add_round_image(_open_upload(up_img3), right_index=2)
 
     # Divider under header
     fig.lines.append(plt.Line2D([LEFT, 1 - RIGHT],
@@ -1867,8 +1930,8 @@ else:
         is_last = (idx == len(sections) - 1)
         y_top = draw_panel(y_top, title, data, show_xticks=is_last, draw_bottom_divider=not is_last)
 
-    # Footer caption
-    fig.text((LEFT + gutter + (1 - RIGHT))/2.0, BOT * 0.1, "Percentile Rank",
+    # Footer caption (customizable)
+    fig.text((LEFT + gutter + (1 - RIGHT))/2.0, BOT * 0.1, footer_caption_text,
              ha="center", va="center", color=LABEL_C, fontproperties=FOOTER_FP)
 
     st.pyplot(fig, use_container_width=True)
@@ -1886,6 +1949,7 @@ else:
     )
     plt.close(fig)
 # ============================ END — Feature Z ============================
+
 
 
 
