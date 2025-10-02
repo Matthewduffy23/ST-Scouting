@@ -368,11 +368,14 @@ for role, role_def in ROLES.items():
         st.dataframe(top_table(filtered_view(df_f, value_max=v_max), role, int(top_n)), use_container_width=True)
         st.divider()
 
-# ----------------- METRIC LEADERBOARD (9/10 polished) -----------------
+# ----------------- METRIC LEADERBOARD — themed + palettes + custom title -----------------
 import re, numpy as np, matplotlib.pyplot as plt
-from matplotlib.colors import LinearSegmentedColormap, Normalize
+from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.ticker import FuncFormatter
 from matplotlib import rcParams, font_manager as fm
+import pandas as pd
+import matplotlib as mpl
+import streamlit as st
 
 # --- Rendering crispness & font setup
 rcParams.update({
@@ -382,7 +385,6 @@ rcParams.update({
     "font.family": "sans-serif",
     "font.sans-serif": ["Inter","Roboto","SF Pro Text","Segoe UI","Helvetica Neue","Arial"],
 })
-
 for p in ["./fonts/Inter-Variable.ttf","./fonts/Inter-Regular.ttf"]:
     try: fm.fontManager.addfont(p)
     except: pass
@@ -390,19 +392,49 @@ for p in ["./fonts/Inter-Variable.ttf","./fonts/Inter-Regular.ttf"]:
 st.markdown("---")
 
 with st.expander("Leaderboard settings", expanded=False):
+    # Basic controls
     default_metric = "Non-penalty goals per 90" if "Non-penalty goals per 90" in FEATURES else FEATURES[0]
     metric_pick   = st.selectbox("Metric", FEATURES, index=FEATURES.index(default_metric))
     top_n         = st.slider("Top N", 5, 40, 20, 5)
 
+    # Theme (match scatterplot)
+    theme = st.radio("Theme", ["Light", "Dark"], index=0, horizontal=True, key="lb_theme")
+    PAGE_BG = "#ebebeb" if theme == "Light" else "#0a0f1c"
+    PLOT_BG = "#f3f3f3" if theme == "Light" else "#0f151f"
+    GRID_MAJ = "#d7d7d7" if theme == "Light" else "#3a4050"
+    TXT      = "#111111" if theme == "Light" else "#f5f5f5"
+    TICK     = "#374151" if theme == "Light" else "#d1d5db"
+    SPINE    = "#d1d5db" if theme == "Light" else "#6b7280"
+
+    # Palette options (exactly as scatterplot)
+    palette_options = [
+        "Red–Gold–Green (diverging)",
+        "Light-grey → Black",
+        "Light-Red → Dark-Red",
+        "Light-Blue → Dark-Blue",
+        "Light-Green → Dark-Green",
+        "Purple ↔ Gold (diverging)",
+        "All White",
+        "All Black",
+    ]
+    palette_choice = st.selectbox("Palette", palette_options, index=palette_options.index("All Black"), key="lb_palette")
+    reverse_scale  = st.checkbox("Reverse colours", value=False, key="lb_reverse")
+
+    # Custom title
+    show_title   = st.checkbox("Show custom title", value=False, key="lb_show_title")
+    custom_title = st.text_input("Custom title", f"Top {top_n} – {metric_pick}", key="lb_title")
+
 # --- Data
 val_col = metric_pick
 plot_df = df_f[["Player","Team",val_col]].dropna(subset=[val_col]).copy()
+plot_df[val_col] = pd.to_numeric(plot_df[val_col], errors="coerce")
+plot_df = plot_df.dropna(subset=[val_col])
 plot_df = plot_df.sort_values(val_col, ascending=False).head(int(top_n)).reset_index(drop=True)
 
-# Label formatter "M.Grimes, Coventry"
+# Label: "M.Grimes, Coventry"
 def label_name_team(player, team):
     tokens = re.split(r"\s+", str(player).strip())
-    if tokens:
+    if tokens and tokens[0]:
         initial = tokens[0][0]
         last = re.sub(r"[^\w\-’']", "", tokens[-1])
         name = f"{initial}.{last}"
@@ -411,50 +443,75 @@ def label_name_team(player, team):
     return f"{name}, {team}"
 
 y_labels = [label_name_team(r.Player, r.Team) for r in plot_df.itertuples(index=False)]
-vals = plot_df[val_col].astype(float).values
+vals = plot_df[val_col].astype(float).values if len(plot_df) else np.array([0.0])
 
-# --- Medium→Dark Blue palette (subtle; bottom still medium blue)
-# higher = darker, lower = medium (not pale)
-cmap = LinearSegmentedColormap.from_list(
-    "medium_to_dark_blue",
-    ["#5F8EF1",  # medium blue (min)
-     "#2F63D4",  # mid blue
-     "#0A2A66"]  # deep navy (max)
-)
-norm   = Normalize(vmin=float(vals.min()), vmax=float(vals.max()))
-colors = [cmap(norm(v)) for v in vals]
+# --- Colour mapping (identical logic to scatterplot)
+def interp(a, b, u):
+    a = np.array(a, dtype=float); b = np.array(b, dtype=float)
+    return (a + (b - a) * np.clip(u, 0, 1)) / 255.0
+
+def color_mapper(palette, t):
+    if palette == "Red–Gold–Green (diverging)":
+        red, gold, green = [199,54,60], [240,197,106], [61,166,91]
+        return interp(red, gold, t/0.5) if t <= 0.5 else interp(gold, green, (t-0.5)/0.5)
+    if palette == "Light-grey → Black":
+        return interp([210,214,220], [20,23,31], t)
+    if palette == "Light-Red → Dark-Red":
+        return interp([252,190,190], [139,0,0], t)
+    if palette == "Light-Blue → Dark-Blue":
+        return interp([191,210,255], [10,42,102], t)
+    if palette == "Light-Green → Dark-Green":
+        return interp([196,235,203], [12,92,48], t)
+    if palette == "Purple ↔ Gold (diverging)":
+        purple, mid, gold = [96,55,140], [180,150,210], [240,197,106]
+        return interp(purple, mid, t/0.5) if t <= 0.5 else interp(mid, gold, (t-0.5)/0.5)
+    if palette == "All White":
+        return np.array([255,255,255])/255.0
+    # else "All Black"
+    return np.array([0,0,0])/255.0
+
+if len(vals) > 1:
+    vmin, vmax = float(vals.min()), float(vals.max())
+    if vmin == vmax: vmax = vmin + 1e-6
+    ts = (vals - vmin) / (vmax - vmin)
+else:
+    ts = np.zeros_like(vals)
+
+if reverse_scale:
+    ts = 1.0 - ts
+bar_colors = [tuple(color_mapper(palette_choice, float(t))) for t in ts]
 
 # --- Figure
 fig, ax = plt.subplots(figsize=(11.5, 6.2))
-page_grey = "#f3f4f6"
-fig.patch.set_facecolor(page_grey)
-ax.set_facecolor(page_grey)
+fig.patch.set_facecolor(PAGE_BG)
+ax.set_facecolor(PLOT_BG)
 
 # Title
-fig.suptitle(f"Top {len(plot_df)} – {metric_pick}",
-             fontsize=16, fontweight="bold", color="#111827", y=0.985)
+title_text = custom_title.strip() if (show_title and custom_title.strip()) else f"Top {len(plot_df)} – {metric_pick}"
+fig.suptitle(title_text, fontsize=16, fontweight="bold", color=TXT, y=0.985)
+
 plt.subplots_adjust(top=0.90, left=0.27, right=0.965, bottom=0.14)
 
 # Bars
-bars = ax.barh(range(len(vals)), vals, color=colors, edgecolor="none", zorder=2)
+bars = ax.barh(range(len(vals)), vals, color=bar_colors, edgecolor="none", zorder=2)
 
 # Axes & labels
 ax.invert_yaxis()
 ax.set_yticks(range(len(vals)))
-ax.set_yticklabels(y_labels, fontsize=10.5, color="#0f172a")
+ax.set_yticklabels(y_labels, fontsize=10.5, color=TXT)
 ax.set_ylabel("")
-ax.set_xlabel(val_col, color="#111827", labelpad=6, fontsize=9.5)  # smaller label
+ax.set_xlabel(val_col, color=TXT, labelpad=6, fontsize=10.5, fontweight="semibold")
 
 # Gridlines
-ax.grid(axis="x", color="#e7e9ec", linewidth=0.7, zorder=1)
+ax.grid(axis="x", color=GRID_MAJ, linewidth=0.8, zorder=1)
 
-# Spines cleanup
+# Spines & ticks
+for side in ["top","right"]:
+    ax.spines[side].set_visible(False)
 ax.spines["left"].set_visible(False)
+ax.spines["bottom"].set_color(SPINE)
 ax.tick_params(axis="y", length=0)
-ax.spines["top"].set_visible(False)
-ax.spines["right"].set_visible(False)
-ax.spines["bottom"].set_color("#d1d5db")
-ax.tick_params(axis="x", labelsize=9, colors="#374151")
+ax.tick_params(axis="x", labelsize=9.5, colors=TICK)
 
 # X ticks
 def fmt(x, _): return f"{x:,.0f}" if float(x).is_integer() else f"{x:,.2f}"
@@ -462,16 +519,17 @@ ax.xaxis.set_major_formatter(FuncFormatter(fmt))
 xmax = float(vals.max()) if len(vals) else 1.0
 ax.set_xlim(0, xmax * 1.1)
 
-# Value labels: small, plain, aligned neatly
+# Value labels
 pad = (ax.get_xlim()[1] - ax.get_xlim()[0]) * 0.012
 for rect, v in zip(bars, vals):
     ax.text(rect.get_width() + pad,
             rect.get_y() + rect.get_height()/2,
             fmt(v, None),
-            va="center", ha="left", fontsize=8.5, color="#111827")
+            va="center", ha="left", fontsize=9.5, color=TXT)
 
 st.pyplot(fig, use_container_width=True)
 # ----------------- END -----------------
+
 
 
 
