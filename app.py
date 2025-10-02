@@ -2303,7 +2303,7 @@ with st.expander("Scatter settings", expanded=False):
 
 
 
-# ----------------- (B) COMPARISON RADAR — true deciles (1dp) + refined light/dark rings -----------------
+# ----------------- (B) COMPARISON RADAR — decile tick values (1dp) + light/dark theme + exact edge -----------------
 st.markdown("---")
 st.header("📊 Player Comparison Radar")
 
@@ -2328,27 +2328,25 @@ with st.expander("Radar settings", expanded=False):
 
 # Colors per theme
 if radar_theme == "Dark":
-    PAGE_BG = "#0a0f1c"   # page
-    AX_BG   = "#0a0f1c"   # panel
-    # 10-band palette, **lighter outside → slightly darker to center** (clean, professional blues/slates)
-    DARK_BANDS = [
-        "#203049", "#1C2A41", "#19253B", "#162135", "#141D30",
-        "#111A2B", "#0F1727", "#0D1423", "#0B121F", "#0A101C"
-    ]
-    RING_COLOR  = "#3a4050"
+    PAGE_BG = "#0a0f1c"         # page
+    AX_BG   = "#0a0f1c"         # chart panel
+    # lighter on the OUTSIDE, alternating toward center (slightly lighter outer band)
+    GRID_BAND_OUTER = "#223454" # lighter outside band (brighter than before)
+    GRID_BAND_INNER = "#0d1524" # darker
+    RING_COLOR  = "#cbd5e1"     # outside line more white
     LABEL_COLOR = "#f5f5f5"
     TICK_COLOR  = "#e5e7eb"
     MINUTES_CLR = "#f5f5f5"
 else:
-    PAGE_BG = "#ffffff"   # white outside
-    AX_BG   = "#ebebeb"   # keep soft grey panel
-    # **Grey starts on the OUTSIDE**, then alternate grey ↔ white toward center
-    LIGHT_OUTER_GREY = "#e5e7eb"
-    LIGHT_INNER_WHITE = "#ffffff"
+    PAGE_BG = "#ffffff"         # white outside the chart
+    AX_BG   = "#ebebeb"         # keep panel soft grey
+    # OUTERMOST ring must be GREY, then alternate grey ↔ white inward
+    GRID_BAND_OUTER = "#e5e7eb" # outer grey
+    GRID_BAND_INNER = "#ffffff" # inner white
     RING_COLOR  = "#d1d5db"
     LABEL_COLOR = "#0f172a"
-    TICK_COLOR  = "#475569"
-    MINUTES_CLR = "#334155"
+    TICK_COLOR  = "#6b7280"
+    MINUTES_CLR = "#374151"
 
 if player_row.empty:
     st.info("Pick a player above to draw the radar.")
@@ -2363,7 +2361,8 @@ else:
 
         # Player B options using the universal position_filter
         pool_pos = df[df["Position"].astype(str).apply(position_filter)].copy()
-        players_b = sorted([p for p in pool_pos["Player"].dropna().unique().tolist() if p != pA])
+        players_b = sorted(pool_pos["Player"].dropna().unique().tolist())
+        players_b = [p for p in players_b if p != pA]
 
         if not players_b:
             st.info("No comparison players available for the current universal position filter.")
@@ -2411,7 +2410,7 @@ else:
                         # Labels
                         labels = [_clean_radar_label(m) for m in radar_metrics]
 
-                        # TRUE deciles (0..100) for each metric — displayed at **1dp**
+                        # === TRUE decile tick values (dataset values at 0,10,...,100th percentiles) ===
                         qs = np.linspace(0, 100, 11)
                         axis_ticks = [np.nanpercentile(pool[m].values, qs) for m in radar_metrics]
 
@@ -2443,39 +2442,27 @@ else:
                             ax.set_xticklabels(labels, fontsize=AXIS_FS, color=LABEL_COLOR, fontweight=600)
                             ax.set_yticks([]); ax.grid(False); [s.set_visible(False) for s in ax.spines.values()]
 
-                            # ring edges 0..10 → INNER_HOLE..100
+                            # radial bands (10 bands from INNER_HOLE to 100). i=0 inner ... i=9 outer
                             ring_edges = np.linspace(INNER_HOLE, 100, 11)
+                            for i in range(10):
+                                r0, r1 = ring_edges[i], ring_edges[i+1]
+                                # choose band so that OUTERMOST ring (i=9) uses GRID_BAND_OUTER
+                                band = GRID_BAND_OUTER if ((9 - i) % 2 == 0) else GRID_BAND_INNER
+                                ax.add_artist(Wedge(
+                                    (0,0), r1, 0, 360, width=(r1-r0),
+                                    transform=ax.transData._b, facecolor=band,
+                                    edgecolor="none", zorder=0.8
+                                ))
 
-                            # ---- Bands ----
-                            if radar_theme == "Dark":
-                                # 10 distinct bands, lighter outside to darker inside
-                                for i in range(10):
-                                    r0, r1 = ring_edges[i], ring_edges[i+1]
-                                    ax.add_artist(Wedge(
-                                        (0,0), r1, 0, 360, width=(r1-r0),
-                                        transform=ax.transData._b, facecolor=DARK_BANDS[i],
-                                        edgecolor="none", zorder=0.8
-                                    ))
-                            else:
-                                # Light: start **grey on outside**, alternate to center
-                                for i in range(10):
-                                    r0, r1 = ring_edges[i], ring_edges[i+1]
-                                    band = LIGHT_OUTER_GREY if i == 0 or i % 2 == 0 else LIGHT_INNER_WHITE
-                                    ax.add_artist(Wedge(
-                                        (0,0), r1, 0, 360, width=(r1-r0),
-                                        transform=ax.transData._b, facecolor=band,
-                                        edgecolor="none", zorder=0.8
-                                    ))
-
-                            # ring outlines
+                            # ring outlines (outside line is light in dark theme)
                             ring_t = np.linspace(0, 2*np.pi, 361)
                             for r in ring_edges:
                                 ax.plot(ring_t, np.full_like(ring_t, r), color=RING_COLOR, lw=RING_LW, zorder=0.9)
 
-                            # numeric decile labels (1dp), shown from 20th to reduce clutter
-                            start_idx = 2
+                            # numeric tick labels at each ring = TRUE dataset quantiles (rounded to 1dp)
+                            start_idx = 2  # show from 20th to reduce clutter
                             for i, ang in enumerate(theta):
-                                vals = ticks[i]
+                                vals = ticks[i]  # 11 values (0..100th)
                                 for rr, v in zip(ring_edges[start_idx:], vals[start_idx:]):
                                     ax.text(ang, rr-1.8, f"{float(v):.1f}",
                                             ha="center", va="center",
@@ -2485,14 +2472,14 @@ else:
                             ax.add_artist(Circle((0,0), radius=INNER_HOLE-0.6, transform=ax.transData._b,
                                                  color=PAGE_BG, zorder=1.2, ec="none"))
 
-                            # polygons (percentiles as radii)
+                            # A & B polygons (percentile radii)
                             ax.plot(theta_c, Ar, color=COL_A, lw=2.2, zorder=3)
                             ax.fill(theta_c, Ar, color=FILL_A, zorder=2.5)
                             ax.plot(theta_c, Br, color=COL_B, lw=2.2, zorder=3)
                             ax.fill(theta_c, Br, color=FILL_B, zorder=2.5)
-                            ax.set_rlim(0, 100)  # edge = 100th percentile ring
+                            ax.set_rlim(0, 100)  # edge of graph = 100th percentile ring (no extra margin)
 
-                            # headers
+                            # headers (teams / leagues / minutes)
                             minsA = f"{int(pd.to_numeric(rowA.get('Minutes played',0))):,} mins" if pd.notna(rowA.get('Minutes played')) else "Minutes: N/A"
                             minsB = f"{int(pd.to_numeric(rowB.get('Minutes played',0))):,} mins" if pd.notna(rowB.get('Minutes played')) else "Minutes: N/A"
 
@@ -2511,12 +2498,12 @@ else:
                             headerB=pB, subB=f"{rowB['Team']} — {rowB['League']}",
                         )
                         st.caption(
-                            "Rings display **actual dataset deciles** (0–100th) at **1 decimal place**. "
-                            "Light theme starts with a **grey outer ring**; Dark theme uses a **refined light→dark palette** toward the center. "
-                            "Polygons show player percentiles vs the **combined A∪B league pool** under your universal position filter."
+                            "Ring labels show the **actual dataset values** at each decile (0–100th), rounded to **1 decimal place**. "
+                            "Light theme uses an **outer grey ring** alternating inward; Dark theme uses a refined palette with a **brighter outer line**."
                         )
                         st.pyplot(fig_r, use_container_width=True)
 # ----------------- END Radar -----------------
+
 
 
 
