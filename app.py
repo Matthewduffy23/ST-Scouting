@@ -1784,7 +1784,7 @@ else:
 
 
 
-# ============================== SCATTERPLOT — title, auto ticks, extra headroom ==============================
+# ============================== SCATTERPLOT — title lower, bigger labels, doubled tick step ==============================
 st.markdown("---")
 st.header("📈 Scatterplot")
 
@@ -1851,25 +1851,19 @@ with st.expander("Scatter settings", expanded=False):
     GRID_MAJ = "#d7d7d7" if theme == "Light" else "#3a4050"
     txt_col  = "#111111" if theme == "Light" else "#f5f5f5"
 
-    # Colour mapping
-    colour_metric = st.selectbox("Colour dots by metric (scaled within pool)",
-        [c for c in FEATURES if c in numeric_cols],
-        index=(FEATURES.index(x_default) if x_default in FEATURES else 0),
-        key="sc_colour_metric")
-    palette_choice = st.selectbox(
-        "Palette",
-        [
-            "Red–Gold–Green (diverging)",
-            "Light-grey → Black",
-            "Light-Red → Dark-Red",
-            "Light-Blue → Dark-Blue",
-            "Light-Green → Dark-Green",
-            "Purple ↔ Gold (diverging)",
-            "All White",
-            "All Black",
-        ],
-        index=0, key="sc_palette"
-    )
+    # Colour mapping (default = All Black on Light theme)
+    palette_options = [
+        "Red–Gold–Green (diverging)",
+        "Light-grey → Black",
+        "Light-Red → Dark-Red",
+        "Light-Blue → Dark-Blue",
+        "Light-Green → Dark-Green",
+        "Purple ↔ Gold (diverging)",
+        "All White",
+        "All Black",
+    ]
+    default_palette_idx = palette_options.index("All Black") if theme == "Light" else 0
+    palette_choice = st.selectbox("Palette", palette_options, index=default_palette_idx, key="sc_palette")
     reverse_scale  = st.checkbox("Reverse colours", value=False, key="sc_reverse")
 
     # === Canvas & top gap & title ===
@@ -1878,12 +1872,12 @@ with st.expander("Scatter settings", expanded=False):
     top_gap_px = st.slider("Top blank gap (px)", 0, 240, 100, 5)
 
     show_title = st.checkbox("Show custom title", value=False, key="sc_show_title")
-    custom_title = st.text_input("Custom title", "xG per 90 vs Non-penalty goals per 90", key="sc_title")
+    custom_title = st.text_input("Custom title", f"{y_metric} vs {x_metric}", key="sc_title")
 
     # Exact-pixel render
     render_exact = st.checkbox("Render exact pixels (PNG)", value=True)
 
-# ---- Build pool ----
+# ---- Build & plot ----
 try:
     pool_sc = df[df["League"].isin(leagues_scatter)].copy()
     if same_pos_scatter and not player_row.empty:
@@ -1937,7 +1931,6 @@ try:
                 "text.antialiased": True,
             })
 
-            # === Figure with exact pixels ===
             fig, ax = plt.subplots(figsize=(w_px/100, h_px/100), dpi=100)
             fig.patch.set_facecolor(PAGE_BG)
             ax.set_facecolor(PLOT_BG)
@@ -1945,7 +1938,6 @@ try:
             x_vals = pool_sc[x_metric].to_numpy(float)
             y_vals = pool_sc[y_metric].to_numpy(float)
 
-            # ----- Nice step (Tableau-ish) -----
             import math
             def nice_step(vmin, vmax, target_ticks=6):
                 span = abs(vmax - vmin)
@@ -1953,14 +1945,13 @@ try:
                 raw = span / max(target_ticks, 2)
                 power = 10 ** math.floor(math.log10(raw))
                 mult = raw / power
-                if mult <= 1: k = 1
-                elif mult <= 2: k = 2
+                if   mult <= 1:   k = 1
+                elif mult <= 2:   k = 2
                 elif mult <= 2.5: k = 2.5
-                elif mult <= 5: k = 5
-                else: k = 10
+                elif mult <= 5:   k = 5
+                else:             k = 10
                 return k * power
 
-            # ----- Padded limits with extra headroom on the max side -----
             def padded_limits(arr, pad_frac=0.06, headroom=0.03):
                 a_min, a_max = float(np.nanmin(arr)), float(np.nanmax(arr))
                 if a_min == a_max: a_min -= 1e-6; a_max += 1e-6
@@ -2015,7 +2006,7 @@ try:
                 others = pool_sc
                 sel    = pool_sc.iloc[0:0]
 
-            # ---------- Points ----------
+            # Points
             ax.scatter(
                 others[x_metric], others[y_metric],
                 s=point_size, c=list(color_series.loc[others.index]),
@@ -2043,7 +2034,7 @@ try:
                 ax.axvline(med_x, color=med_col, ls=(0,(4,4)), lw=2.2, zorder=3)
                 ax.axhline(med_y, color=med_col, ls=(0,(4,4)), lw=2.2, zorder=3)
 
-            # ---------- Labels ----------
+            # Labels
             texts = []
             if not sel.empty:
                 sx, sy = float(sel.iloc[0][x_metric]), float(sel.iloc[0][y_metric])
@@ -2063,13 +2054,10 @@ try:
                 cx, cy = float(np.nanmedian(x_vals)), float(np.nanmedian(y_vals))
                 dist = (candidates[x_metric]-cx)**2 + (candidates[y_metric]-cy)**2
                 candidates = candidates.assign(_prio=-dist.values).sort_values("_prio")
-
                 x_tol = (xlim[1]-xlim[0]) * 0.035
                 y_tol = (ylim[1]-ylim[0]) * 0.035
                 placed = []
-                if not sel.empty:
-                    placed.append((sx, sy))
-
+                if not sel.empty: placed.append((sx, sy))
                 for _, r in candidates.iterrows():
                     px, py = float(r[x_metric]), float(r[y_metric])
                     if not allow_overlap and any(abs(px-qx) < x_tol and abs(py-qy) < y_tol for (qx,qy) in placed):
@@ -2085,7 +2073,6 @@ try:
                                                       foreground=("#ffffff" if theme=="Light" else "#1e293b"),
                                                       alpha=0.9)])
                     texts.append(t)
-
                 try:
                     if _HAS_ADJUST and not allow_overlap and texts:
                         adjust_text(texts, ax=ax, only_move={"points":"y", "text":"xy"},
@@ -2095,13 +2082,11 @@ try:
                 except Exception:
                     pass
 
-            # ---------- Axes & grid ----------
-            ax.set_xlabel(x_metric, fontweight="bold", color=txt_col)
-            ax.set_ylabel(y_metric, fontweight="bold", color=txt_col)
-
+            # Axes & ticks
+            # Double the auto step (fewer ticks = more spacing)
             if tick_mode.startswith("Auto"):
-                step_x = nice_step(*xlim, target_ticks=6)
-                step_y = nice_step(*ylim, target_ticks=6)
+                step_x = nice_step(*xlim, target_ticks=6) * 2
+                step_y = nice_step(*ylim, target_ticks=6) * 2
             else:
                 step_x = step_y = float(tick_mode)
 
@@ -2120,21 +2105,24 @@ try:
             for tick in ax.get_xticklabels() + ax.get_yticklabels():
                 tick.set_fontweight('semibold'); tick.set_color(txt_col)
 
+            # Bigger, semibold axis labels
+            ax.set_xlabel(x_metric, fontsize=14, fontweight="semibold", color=txt_col)
+            ax.set_ylabel(y_metric, fontsize=14, fontweight="semibold", color=txt_col)
+
             ax.grid(True, which="major", linewidth=0.9, color=GRID_MAJ)
             for s in ax.spines.values():
                 s.set_linewidth(0.9)
                 s.set_color("#9ca3af" if theme=="Light" else "#6b7280")
 
-            # ===== fixed top gap =====
+            # Fixed top gap
             top_frac = 1.0 - (top_gap_px / float(h_px))
             fig.subplots_adjust(left=0.075, right=0.985, bottom=0.105, top=top_frac)
 
-            # Optional title centered in the gap
+            # Title slightly LOWER than center of the gap (closer to plot)
             if show_title and custom_title.strip():
                 title_col = "#111111" if theme == "Light" else "#f5f5f5"
-                # place in the center of the gap area
-                y_gap_center = top_frac + (1 - top_frac) * 0.5
-                fig.text(0.5, y_gap_center, custom_title.strip(),
+                y_gap_lower = top_frac + (1 - top_frac) * 0.35   # was 0.50; now a bit lower
+                fig.text(0.5, y_gap_lower, custom_title.strip(),
                          ha="center", va="center", color=title_col,
                          fontsize=26, fontweight="semibold")
 
@@ -2150,6 +2138,7 @@ try:
 except Exception as e:
     st.info(f"Scatter could not be drawn: {e}")
 # ==========================================================================================================
+
 
 
 
