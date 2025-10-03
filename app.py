@@ -2370,7 +2370,7 @@ if radar_theme == "Dark":
     LABEL_COLOR = "#f5f5f5"
     TICK_COLOR  = "#e5e7eb"
     MINUTES_CLR = "#f5f5f5"
-    MEDIAN_LINE_COLOR = "#e5e7eb"   # high contrast in dark
+    MEDIAN_LINE_COLOR = "#94A3B8"   # high contrast in dark
 else:
     PAGE_BG = "#ffffff"
     AX_BG   = "#ebebeb"
@@ -2545,7 +2545,7 @@ else:
                             # 50th percentile line (plot on TOP for visibility)
                             if AVG_r is not None:
                                 Avg = np.concatenate([AVG_r, AVG_r[:1]]).astype(float)
-                                ax.plot(theta_c, Avg, lw=2.0, color=MEDIAN_LINE_COLOR, ls="--", alpha=1.0, zorder=4)
+                                ax.plot(theta_c, Avg, lw=1.5, color=MEDIAN_LINE_COLOR, ls="--", alpha=1.0, zorder=4)
 
                             # keep edge exactly at 100; labels allowed outside via clip_on=False
                             ax.set_rlim(0, 100)
