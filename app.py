@@ -2370,7 +2370,7 @@ if radar_theme == "Dark":
     LABEL_COLOR = "#f5f5f5"
     TICK_COLOR  = "#e5e7eb"
     MINUTES_CLR = "#f5f5f5"
-    MEDIAN_LINE_COLOR = "#94A3B8"   # high contrast in dark
+    MEDIAN_LINE_COLOR = "#a3a3a3"   # high contrast in dark
 else:
     PAGE_BG = "#ffffff"
     AX_BG   = "#ebebeb"
