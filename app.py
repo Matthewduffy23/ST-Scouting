@@ -1594,6 +1594,7 @@ with st.expander("Feature Z options", expanded=False):
     name_override_on = st.checkbox("Edit player display name", value=False)
     name_override    = st.text_input("Display name", "", disabled=not name_override_on)
 
+    # --- Height (existing pattern) ---
     default_height = ""
     try:
         if not player_row.empty:
@@ -1608,22 +1609,40 @@ with st.expander("Feature Z options", expanded=False):
     _edit_footer = st.toggle("Edit footer caption", value=False, key="fz_edit_footer")
     footer_caption_text = st.text_input("Footer caption", _CAPTION_DEFAULT, disabled=not _edit_footer, key="fz_footer_text")
 
+    # --- NEW: Edit 'Foot' in information row (like Height) ---
+    default_foot = ""
+    try:
+        if not player_row.empty:
+            for col in ["Foot","Preferred Foot"]:
+                if col in player_row.columns and str(player_row.iloc[0][col]).strip():
+                    default_foot = str(player_row.iloc[0][col]).strip(); break
+    except Exception: pass
+    foot_override_on = st.checkbox("Edit foot in info row", value=False, key="fz_foot_edit")
+    foot_override_text = st.text_input("Foot value (e.g., Left)", default_foot, disabled=not foot_override_on, key="fz_foot_text")
+
     if enable_images:
         st.caption("Upload up to three header images (PNG recommended). Rightmost is the anchor.")
         up_img1 = st.file_uploader("Image 1 (rightmost)", type=["png","jpg","jpeg","webp"], key="fz_img1")
         up_img2 = st.file_uploader("Image 2 (middle)",   type=["png","jpg","jpeg","webp"], key="fz_img2")
         up_img3 = st.file_uploader("Image 3 (leftmost)", type=["png","jpg","jpeg","webp"], key="fz_img3")
 
-        # NEW: uniform spacing presets (slightly wider steps from your current default)
+        # Spacing presets
         spacing_preset = st.selectbox(
             "Badge spacing",
             ["Tight (default)", "Tight +", "Medium", "Wide"],
             index=0,
             help="Keeps equal gaps; each step is a little wider than the previous."
         )
+
+        # --- NEW: per-image horizontal fine-tune (figure fraction; negative=left, positive=right) ---
+        st.caption("Fine-tune each image’s horizontal position (− left, + right).")
+        img1_dx = st.slider("Shift Image 1 (rightmost)", min_value=-0.05, max_value=0.05, value=0.00, step=0.001, key="fz_dx_img1")
+        img2_dx = st.slider("Shift Image 2 (middle)",    min_value=-0.05, max_value=0.05, value=0.00, step=0.001, key="fz_dx_img2")
+        img3_dx = st.slider("Shift Image 3 (leftmost)",  min_value=-0.05, max_value=0.05, value=0.00, step=0.001, key="fz_dx_img3")
     else:
         up_img1 = up_img2 = up_img3 = None
         spacing_preset = "Tight (default)"  # unused when images disabled
+        img1_dx = img2_dx = img3_dx = 0.0   # ensure defined even when disabled
 
 def _safe_get(df_or_series, key, default="—"):
     try:
@@ -1666,6 +1685,9 @@ else:
     goals   = _safe_get(player_row, "Goals", "—")
     assists = _safe_get(player_row, "Assists", "—")
     foot    = _safe_get(player_row, "Foot", _safe_get(player_row, "Preferred Foot", "—"))
+
+    # Apply foot override (if enabled)
+    foot_display = (foot_override_text.strip() if (foot_override_on and foot_override_text and foot_override_text.strip()) else foot)
 
     # === sections (unchanged) ===
     ATTACKING = []
@@ -1731,7 +1753,7 @@ else:
         header_block_h = title_row_h + 0.055   # unchanged
         img_box_w = img_box_h = 0.16
 
-        # NEW: choose img_gap & shifts from preset (equalize spacing with s2 = 2*s1)
+        # Presets for baseline spacing (equalize with s2 = 2*s1)
         preset_map = {
             "Tight (default)": {"img_gap": 0.0001, "s0": 0.02, "s1": 0.050},
             "Tight +":         {"img_gap": 0.0030, "s0": 0.02, "s1": 0.047},
@@ -1777,12 +1799,12 @@ else:
     if not enable_images:
         pairs = [("Position: ",pos), ("Age: ",age)]
         if show_height and height_text.strip(): pairs.append(("Height: ",height_text.strip()))
-        pairs += [("Foot: ",foot), ("Games: ",games), ("Minutes: ",minutes), ("Goals: ",goals), ("Assists: ",assists)]  # CHANGED label
+        pairs += [("Foot: ",foot_display), ("Games: ",games), ("Minutes: ",minutes), ("Goals: ",goals), ("Assists: ",assists)]
         draw_pairs_line(pairs, 1 - TOP - title_row_h + 0.010)
     else:
         row1 = [("Position: ",pos), ("Age: ",age), ("Height: ", (height_text.strip() if (show_height and height_text.strip()) else "—"))]
         row2 = [("Games: ",games), ("Goals: ",goals), ("Assists: ",assists)]
-        row3 = [("Minutes: ",minutes), ("Foot: ",foot)]  # CHANGED label
+        row3 = [("Minutes: ",minutes), ("Foot: ",foot_display)]
 
         title_y = 1 - TOP - 0.010
         y1 = title_y - 0.055
@@ -1805,7 +1827,12 @@ else:
             x_right_edge = 1 - RIGHT
             x = x_right_edge - (right_index + 1) * img_box_w - right_index * img_gap
             # Uniform-spacing nudges (right): 0=anchor, 1=middle, 2=left (left = 2× middle)
-            per_image_shift = {0: _s0, 1: _s1, 2: _s2}
+            # Include user fine-tune shifts per image:
+            per_image_shift = {
+                0: _s0 + img1_dx,
+                1: _s1 + img2_dx,
+                2: _s2 + img3_dx
+            }
             x += per_image_shift.get(right_index, 0.0)
             y_top_band = 1 - TOP - 0.006
             y = y_top_band - img_box_h
