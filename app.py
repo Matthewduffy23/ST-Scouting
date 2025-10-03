@@ -1776,7 +1776,7 @@ else:
 
     rows_space_total = 1 - (TOP + BOT) - header_block_h - header_h*len(sections) - GAP*(len(sections)-1)
     row_slot = rows_space_total / max(total_rows,1)
-    BAR_FRAC = 0.90
+    BAR_FRAC = 0.92
     gutter = 0.215
     ticks = np.arange(0,101,10)
 
