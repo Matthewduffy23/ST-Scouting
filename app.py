@@ -2446,6 +2446,9 @@ else:
                         qs = np.linspace(0, 100, 11)
                         axis_ticks = [np.nanpercentile(pool[m].values, qs) for m in radar_metrics]
 
+                        # 50th percentile reference line (constant radius = 50 in percentile space)
+                        AVG_r = np.full(len(radar_metrics), 50.0)
+
                         # ---- draw radar ----
                         COL_A = "#C81E1E"; COL_B = "#1D4ED8"
                         FILL_A = (200/255, 30/255, 30/255, 0.60)
@@ -2463,7 +2466,8 @@ else:
                             """Tangential rotation in display space, respecting theta offset/direction."""
                             return np.degrees(ax.get_theta_direction() * theta + ax.get_theta_offset()) - 90.0
 
-                        def draw_radar(labels, A_r, B_r, ticks, headerA, subA, headerB, subB):
+                        # NOTE: now accepts AVG_r (optional)
+                        def draw_radar(labels, A_r, B_r, ticks, headerA, subA, headerB, subB, AVG_r=None):
                             N = len(labels)
                             theta = np.linspace(0, 2*np.pi, N, endpoint=False)
                             theta_c = np.concatenate([theta, theta[:1]])
@@ -2530,6 +2534,11 @@ else:
                             ax.add_artist(Circle((0,0), radius=INNER_HOLE-0.6, transform=ax.transData._b,
                                                  color=PAGE_BG, zorder=1.2, ec="none"))
 
+                            # 50th percentile line (if provided)
+                            if AVG_r is not None:
+                                Avg = np.concatenate([AVG_r, AVG_r[:1]])
+                                ax.plot(theta_c, Avg, lw=1.5, color="#94A3B8", ls="--", alpha=0.9, zorder=2.2)
+
                             # A & B polygons (percentile radii)
                             ax.plot(theta_c, Ar, color=COL_A, lw=2.2, zorder=3)
                             ax.fill(theta_c, Ar, color=FILL_A, zorder=2.5)
@@ -2557,6 +2566,7 @@ else:
                             labels, A_r, B_r, axis_ticks,
                             headerA=pA, subA=f"{rowA['Team']} — {rowA['League']}",
                             headerB=pB, subB=f"{rowB['Team']} — {rowB['League']}",
+                            AVG_r=AVG_r  # <-- Pass the 50th percentile line
                         )
                         st.caption(
                             "Ring labels show the **actual dataset values** at each decile (0–100th), rounded to **1 decimal place**. "
@@ -2564,6 +2574,7 @@ else:
                         )
                         st.pyplot(fig_r, use_container_width=True)
 # ----------------- END Radar -----------------
+
 
 
 
