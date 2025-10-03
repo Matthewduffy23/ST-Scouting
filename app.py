@@ -1442,7 +1442,7 @@ else:
 
     rows_space_total = 1 - (top_margin + bot_margin) - header_h * len(sections) - gap_between * (len(sections) - 1)
     row_slot = rows_space_total / max(total_rows, 1)
-    BAR_FRAC = 0.90
+    BAR_FRAC = 0.85
 
     # label gutter width
     probe = fig.text(0, 0, "Successful Defensive Actions", fontsize=11, fontweight="bold", color=LABEL, alpha=0)
@@ -1575,248 +1575,321 @@ else:
 # ============================ END — Feature F ============================
 
 
-# ----------------- (B) COMPARISON RADAR — decile tick values (1dp) + light/dark theme + exact edge + centered/upright outside labels -----------------
-import re
+# ============================ (Z) THREE-PANEL PERCENTILE BOARD — safe headroom + tight, even badges ============================
+from io import BytesIO
+import uuid, numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.transforms import ScaledTranslation
+from matplotlib import font_manager as fm
+from matplotlib.font_manager import FontProperties
+from PIL import Image
+import streamlit as st
 
 st.markdown("---")
-st.header("📊 Player Comparison Radar")
+st.header("📋 Feature Z — White Percentile Board")
 
-DEFAULT_RADAR_METRICS = [
-    "Non-penalty goals per 90","xG per 90","Shots per 90",
-    "Dribbles per 90","Successful dribbles, %","Touches in box per 90",
-    "Aerial duels per 90","Aerial duels won, %","Passes per 90",
-    "Accurate passes, %","xA per 90"
-]
+with st.expander("Feature Z options", expanded=False):
+    enable_images = st.checkbox("Add header images", value=True)
+    show_height   = st.checkbox("Show height in info row", value=True)
+    name_override_on = st.checkbox("Edit player display name", value=False)
+    name_override    = st.text_input("Display name", "", disabled=not name_override_on)
 
-def _clean_radar_label(s: str) -> str:
-    s = s.replace("Non-penalty goals per 90", "Non-Pen Goals")
-    s = s.replace("xG per 90", "xG").replace("xA per 90", "xA")
-    s = s.replace("Shots per 90", "Shots").replace("Passes per 90", "Passes")
-    s = s.replace("Touches in box per 90", "Touches in box").replace("Aerial duels per 90", "Aerial duels")
-    s = s.replace("Successful dribbles, %", "Dribble %").replace("Accurate passes, %", "Pass %")
-    return re.sub(r"\s*per\s*90", "", s, flags=re.I)
+    default_height = ""
+    try:
+        if not player_row.empty:
+            for col in ["Height","Height (ft)","Height ft","Height (cm)"]:
+                if col in player_row.columns and str(player_row.iloc[0][col]).strip():
+                    default_height = str(player_row.iloc[0][col]).strip(); break
+    except Exception: pass
+    height_text = st.text_input("Height value (e.g., 6'2\")", default_height)
 
-# Theme + caption controls
-with st.expander("Radar settings", expanded=False):
-    radar_theme = st.radio("Theme", ["Light", "Dark"], index=0, horizontal=True, key="radar_theme")
+    # --- NEW: editable footer caption (toggle) ---
+    _CAPTION_DEFAULT = "Percentile Rank"
+    _edit_footer = st.toggle("Edit footer caption", value=False, key="fz_edit_footer")
+    footer_caption_text = st.text_input("Footer caption", _CAPTION_DEFAULT, disabled=not _edit_footer, key="fz_footer_text")
 
-    _CAPTION_DEFAULT = (
-        "Ring labels show the actual dataset values at each decile (0–100th), rounded to 1 decimal place. "
-        "Axis labels are centered on their metric angle, auto-flipped upright, and placed outside the 100 ring."
-    )
-    _edit_caption = st.toggle("Edit footer caption", value=False, key="radar_edit_caption")
-    if _edit_caption:
-        radar_caption = st.text_area("Footer caption", value=_CAPTION_DEFAULT, height=90, key="radar_caption_text")
+    if enable_images:
+        st.caption("Upload up to three header images (PNG recommended). Rightmost is the anchor.")
+        up_img1 = st.file_uploader("Image 1 (rightmost)", type=["png","jpg","jpeg","webp"], key="fz_img1")
+        up_img2 = st.file_uploader("Image 2 (middle)",   type=["png","jpg","jpeg","webp"], key="fz_img2")
+        up_img3 = st.file_uploader("Image 3 (leftmost)", type=["png","jpg","jpeg","webp"], key="fz_img3")
+
+        # NEW: uniform spacing presets (slightly wider steps from your current default)
+        spacing_preset = st.selectbox(
+            "Badge spacing",
+            ["Tight (default)", "Tight +", "Medium", "Wide"],
+            index=0,
+            help="Keeps equal gaps; each step is a little wider than the previous."
+        )
     else:
-        radar_caption = _CAPTION_DEFAULT
+        up_img1 = up_img2 = up_img3 = None
+        spacing_preset = "Tight (default)"  # unused when images disabled
 
-# Colors per theme
-if radar_theme == "Dark":
-    PAGE_BG = "#0a0f1c"
-    AX_BG   = "#0a0f1c"
-    GRID_BAND_OUTER = "#162235"
-    GRID_BAND_INNER = "#0d1524"
-    RING_COLOR_INNER = "#3a4050"
-    RING_COLOR_OUTER = "#cbd5e1"
-    LABEL_COLOR = "#f5f5f5"
-    TICK_COLOR  = "#e5e7eb"
-    MINUTES_CLR = "#f5f5f5"
-else:
-    PAGE_BG = "#ffffff"
-    AX_BG   = "#ebebeb"
-    GRID_BAND_OUTER = "#e5e7eb"
-    GRID_BAND_INNER = "#ffffff"
-    RING_COLOR_INNER = RING_COLOR_OUTER = "#d1d5db"
-    LABEL_COLOR = "#0f172a"
-    TICK_COLOR  = "#6b7280"
-    MINUTES_CLR = "#374151"
+def _safe_get(df_or_series, key, default="—"):
+    try:
+        if hasattr(df_or_series, "iloc"): v = df_or_series.iloc[0].get(key, default)
+        else:                              v = df_or_series.get(key, default)
+        s = "" if v is None else str(v)
+        return default if s.strip() == "" else s
+    except Exception:
+        return default
+
+def _font_name_or_fallback(pref, fallback="DejaVu Sans"):
+    installed = {f.name for f in fm.fontManager.ttflist}
+    for n in pref:
+        if n in installed: return n
+    return fallback
+
+FONT_TITLE_FAMILY = _font_name_or_fallback(["Tableau Bold","Tableau Sans Bold","Tableau"])
+FONT_BOOK_FAMILY  = _font_name_or_fallback(["Tableau Book","Tableau Sans","Tableau"])
+TITLE_FP     = FontProperties(family=FONT_TITLE_FAMILY, weight='bold',     size=22)
+H2_FP        = FontProperties(family=FONT_TITLE_FAMILY, weight='semibold', size=20)
+LABEL_FP     = FontProperties(family=FONT_BOOK_FAMILY,  weight='medium',   size=10)
+INFO_LABEL_FP= FontProperties(family=FONT_BOOK_FAMILY,  weight='bold',     size=10)
+INFO_VALUE_FP= FontProperties(family=FONT_BOOK_FAMILY,  weight='regular',  size=10)
+BAR_VALUE_FP = FontProperties(family=FONT_BOOK_FAMILY,  weight='regular',  size=8)
+TICK_FP      = FontProperties(family=FONT_BOOK_FAMILY,  weight='medium',   size=10)
+FOOTER_FP    = FontProperties(family=FONT_BOOK_FAMILY,  weight='medium', size=10)
 
 if player_row.empty:
-    st.info("Pick a player above to draw the radar.")
+    st.info("Pick a player above.")
 else:
-    # Player A is the selected player
-    pA = player_name
-    rowA_all = df[df["Player"] == pA]
-    if rowA_all.empty:
-        st.info("Selected player not found in dataset.")
+    pos   = _safe_get(player_row, "Position", "CM/DM/RW")
+    name_ = _safe_get(player_row, "Player", _safe_get(player_row, "Name", "Kadeem Harris"))
+    if name_override_on and name_override.strip(): name_ = name_override.strip()
+    team  = _safe_get(player_row, "Team", "Carlisle United")
+    age_raw = _safe_get(player_row, "Age", "31.0")
+    try: age = f"{float(age_raw):.0f}"
+    except Exception: age = age_raw
+    games   = _safe_get(player_row, "Matches played", _safe_get(player_row, "Games", _safe_get(player_row, "Apps", "—")))
+    minutes = _safe_get(player_row, "Minutes", _safe_get(player_row, "Minutes played", "—"))  # prefers Minutes
+    goals   = _safe_get(player_row, "Goals", "—")
+    assists = _safe_get(player_row, "Assists", "—")
+    foot    = _safe_get(player_row, "Foot", _safe_get(player_row, "Preferred Foot", "—"))
+
+    # === sections (unchanged) ===
+    ATTACKING = []
+    for lab, met in [
+        ("Crosses","Crosses per 90"),
+        ("Crossing Accuracy %","Accurate crosses, %"),
+        ("Goals: Non-Penalty","Non-penalty goals per 90"),
+        ("xG","xG per 90"),
+        ("Conversion Rate %","Goal conversion, %"),
+        ("Header Goals","Head goals per 90"),
+        ("Expected Assists","xA per 90"),
+        ("Offensive Duels","Offensive duels per 90"),
+        ("Offensive Duel Success %","Offensive duels won, %"),
+        ("Progressive Runs","Progressive runs per 90"),
+        ("Shots","Shots per 90"),
+        ("Shooting Accuracy %","Shots on target, %"),
+        ("Touches in Opposition Box","Touches in box per 90"),
+    ]:
+        ATTACKING.append((lab, float(np.nan_to_num(pct_of(met), nan=0.0)), val_of(met)[1]))
+
+    DEFENSIVE = []
+    for lab, met in [
+        ("Aerial Duels","Aerial duels per 90"),
+        ("Aerial Duel Success %","Aerial duels won, %"),
+        ("Defensive Duels","Defensive duels per 90"),
+        ("Defensive Duel Success %","Defensive duels won, %"),
+        ("PAdj. Interceptions","PAdj Interceptions"),
+    ]:
+        DEFENSIVE.append((lab, float(np.nan_to_num(pct_of(met), nan=0.0)), val_of(met)[1]))
+
+    POSSESSION = []
+    for lab, met in [
+        ("Deep Completions","Deep completions per 90"),
+        ("Dribbles","Dribbles per 90"),
+        ("Dribbling Success %","Successful dribbles, %"),
+        ("Key Passes","Key passes per 90"),
+        ("Passes","Passes per 90"),
+        ("Passing Accuracy %","Accurate passes, %"),
+        ("Passes to Penalty Area","Passes to penalty area per 90"),
+        ("Passes to Penalty Area %","Accurate passes to penalty area, %"),
+        ("Smart Passes","Smart passes per 90"),
+    ]:
+        POSSESSION.append((lab, float(np.nan_to_num(pct_of(met), nan=0.0)), val_of(met)[1]))
+    sections = [("Attacking",ATTACKING),("Defensive",DEFENSIVE),("Possession",POSSESSION)]
+    sections = [(t,lst) for t,lst in sections if lst]
+
+    # === styling ===
+    PAGE_BG = "#ebebeb"; AX_BG = "#f3f3f3"; TRACK="#d6d6d6"
+    TITLE_C="#111111"; LABEL_C="#222222"; DIVIDER="#000000"
+    TAB_RED=np.array([199,54,60]); TAB_GOLD=np.array([240,197,106]); TAB_GREEN=np.array([61,166,91])
+    def _blend(c1,c2,t): c=c1+(c2-c1)*np.clip(t,0,1); return f"#{int(c[0]):02x}{int(c[1]):02x}{int(c[2]):02x}"
+    def pct_to_rgb(v): v=float(np.clip(v,0,100)); return _blend(TAB_RED,TAB_GOLD,v/50) if v<=50 else _blend(TAB_GOLD,TAB_GREEN,(v-50)/50)
+
+    # === layout (HEADROOM increased a touch; labels restored) ===
+    if not enable_images:
+        fig_size   = (10, 8); dpi = 100
+        title_row_h = 0.075
+        header_block_h = title_row_h + 0.020
+        img_box_w = img_box_h = 0.09; img_gap = 0.012
     else:
-        rowA = rowA_all.iloc[0]
+        fig_size   = (11.8, 9.6); dpi = 120
+        title_row_h = 0.125
+        header_block_h = title_row_h + 0.055   # unchanged
+        img_box_w = img_box_h = 0.16
 
-        # Player B options using the universal position_filter
-        pool_pos = df[df["Position"].astype(str).apply(position_filter)].copy()
-        players_b = sorted(pool_pos["Player"].dropna().unique().tolist())
-        players_b = [p for p in players_b if p != pA]
+        # NEW: choose img_gap & shifts from preset (equalize spacing with s2 = 2*s1)
+        preset_map = {
+            "Tight (default)": {"img_gap": 0.0001, "s0": 0.02, "s1": 0.050},
+            "Tight +":         {"img_gap": 0.0030, "s0": 0.02, "s1": 0.047},
+            "Medium":          {"img_gap": 0.0060, "s0": 0.02, "s1": 0.044},
+            "Wide":            {"img_gap": 0.0100, "s0": 0.02, "s1": 0.040},
+        }
+        _p = preset_map.get(spacing_preset, preset_map["Tight (default)"])
+        img_gap = _p["img_gap"]
+        _s0, _s1, _s2 = _p["s0"], _p["s1"], 2 * _p["s1"]   # keep gaps uniform
 
-        if not players_b:
-            st.info("No comparison players available for the current universal position filter.")
-        else:
-            pB = st.selectbox("Player B (blue)", players_b, index=0, key="radar_pb")
+    GLOBAL_LEFT_PAD = 0.02
+    BASE_LEFT, RIGHT = 0.035, 0.020
+    LEFT = BASE_LEFT + GLOBAL_LEFT_PAD
+    TITLE_LEFT_NUDGE = -0.001
+    TOP, BOT = 0.035, 0.07
+    header_h, GAP = 0.045, 0.020
 
-            rowB_all = df[df["Player"] == pB]
-            if rowB_all.empty:
-                st.info("Comparison player not found in dataset.")
-            else:
-                rowB = rowB_all.iloc[0]
+    total_rows = sum(len(lst) for _, lst in sections)
+    fig = plt.figure(figsize=fig_size, dpi=dpi); fig.patch.set_facecolor(PAGE_BG)
 
-                # Numeric radar metrics
-                numeric_cols = set(df.select_dtypes(include="number").columns.tolist())
-                radar_metrics = [m for m in DEFAULT_RADAR_METRICS if m in df.columns and m in numeric_cols]
-                if not radar_metrics:
-                    st.info("No numeric radar metrics available in dataset.")
-                else:
-                    # Pool = A∪B leagues, same universal position filter
-                    union_leagues = {rowA["League"], rowB["League"]}
-                    pool = df[
-                        (df["League"].isin(union_leagues)) &
-                        (df["Position"].astype(str).apply(position_filter))
-                    ].copy()
+    rows_space_total = 1 - (TOP + BOT) - header_block_h - header_h*len(sections) - GAP*(len(sections)-1)
+    row_slot = rows_space_total / max(total_rows,1)
+    BAR_FRAC = 0.90
+    gutter = 0.215
+    ticks = np.arange(0,101,10)
 
-                    for m in radar_metrics:
-                        pool[m] = pd.to_numeric(pool[m], errors="coerce")
-                    pool = pool.dropna(subset=radar_metrics + ["Player"])
+    # --- title ---
+    fig.text(LEFT + TITLE_LEFT_NUDGE, 1 - TOP - 0.010, f"{name_}\u2009|\u2009{team}",
+             ha="left", va="top", color=TITLE_C, fontproperties=TITLE_FP)
 
-                    if pool.empty:
-                        st.info("No players in the combined A∪B league pool after applying the universal position filter.")
-                    else:
-                        # Percentiles for A & B vs pool (0–100 scale)
-                        pool_pct = pool[radar_metrics].rank(pct=True) * 100.0
+    # --- info rows (now anchored just below the title) ---
+    def draw_pairs_line(pairs_line, y):
+        x = LEFT; renderer = fig.canvas.get_renderer()
+        for i,(lab,val) in enumerate(pairs_line):
+            t1 = fig.text(x, y, lab, ha="left", va="top", color=LABEL_C, fontproperties=INFO_LABEL_FP)
+            fig.canvas.draw(); x += t1.get_window_extent(renderer).width / fig.bbox.width
+            t2 = fig.text(x, y, str(val), ha="left", va="top", color=LABEL_C, fontproperties=INFO_VALUE_FP)
+            fig.canvas.draw(); x += t2.get_window_extent(renderer).width / fig.bbox.width
+            if i != len(pairs_line)-1:
+                t3 = fig.text(x, y, "  |  ", ha="left", va="top", color="#555555", fontproperties=INFO_VALUE_FP)
+                fig.canvas.draw(); x += t3.get_window_extent(renderer).width / fig.bbox.width
 
-                        def pct_for(name: str) -> np.ndarray:
-                            idx = pool[pool["Player"] == name].index
-                            if len(idx) == 0:
-                                return np.full(len(radar_metrics), np.nan)
-                            return pool_pct.loc[idx, :].mean(axis=0).values
+    if not enable_images:
+        pairs = [("Position: ",pos), ("Age: ",age)]
+        if show_height and height_text.strip(): pairs.append(("Height: ",height_text.strip()))
+        pairs += [("Foot: ",foot), ("Games: ",games), ("Minutes: ",minutes), ("Goals: ",goals), ("Assists: ",assists)]  # CHANGED label
+        draw_pairs_line(pairs, 1 - TOP - title_row_h + 0.010)
+    else:
+        row1 = [("Position: ",pos), ("Age: ",age), ("Height: ", (height_text.strip() if (show_height and height_text.strip()) else "—"))]
+        row2 = [("Games: ",games), ("Goals: ",goals), ("Assists: ",assists)]
+        row3 = [("Minutes: ",minutes), ("Foot: ",foot)]  # CHANGED label
 
-                        A_r = pct_for(pA)
-                        B_r = pct_for(pB)
+        title_y = 1 - TOP - 0.010
+        y1 = title_y - 0.045
+        y2 = y1 - 0.030
+        y3 = y2 - 0.030
 
-                        # Labels
-                        labels = [_clean_radar_label(m) for m in radar_metrics]
+        draw_pairs_line(row1, y1)
+        draw_pairs_line(row2, y2)
+        draw_pairs_line(row3, y3)
 
-                        # TRUE deciles (0..100) for each metric — displayed at 1dp
-                        qs = np.linspace(0, 100, 11)
-                        axis_ticks = [np.nanpercentile(pool[m].values, qs) for m in radar_metrics]
+    # --- images ---
+    def _open_upload(u):
+        if u is None: return None
+        try: return Image.open(u).convert("RGBA")
+        except Exception: return None
 
-                        # ---- draw radar ----
-                        COL_A = "#C81E1E"; COL_B = "#1D4ED8"
-                        FILL_A = (200/255, 30/255, 30/255, 0.60)
-                        FILL_B = (29/255, 78/255, 216/255, 0.60)
-                        RING_LW = 1.0
-                        TITLE_FS = 26; SUB_FS = 12; AXIS_FS = 10
-                        TICK_FS = 7; INNER_HOLE = 10
+    if enable_images:
+        def add_header_image(pil_img, right_index=0):
+            if pil_img is None: return
+            x_right_edge = 1 - RIGHT
+            x = x_right_edge - (right_index + 1) * img_box_w - right_index * img_gap
+            # Uniform-spacing nudges (right): 0=anchor, 1=middle, 2=left (left = 2× middle)
+            per_image_shift = {0: _s0, 1: _s1, 2: _s2}
+            x += per_image_shift.get(right_index, 0.0)
+            y_top_band = 1 - TOP - 0.006
+            y = y_top_band - img_box_h
+            ax_img = fig.add_axes([x, y, img_box_w, img_box_h])
+            ax_img.imshow(pil_img); ax_img.axis("off")
 
-                        from matplotlib.patches import Wedge, Circle
-                        import matplotlib.pyplot as plt
-                        import numpy as np
-                        import pandas as pd
+        add_header_image(_open_upload(up_img1), right_index=0)
+        add_header_image(_open_upload(up_img2), right_index=1)
+        add_header_image(_open_upload(up_img3), right_index=2)
 
-                        def _tangent_rotation(ax, theta):
-                            """Tangential rotation in display space, respecting theta offset/direction."""
-                            return np.degrees(ax.get_theta_direction() * theta + ax.get_theta_offset()) - 90.0
+    # --- divider a touch lower (headroom) ---
+    fig.lines.append(plt.Line2D([LEFT, 1 - RIGHT],
+                                [1 - TOP - header_block_h + 0.004]*2,
+                                transform=fig.transFigure, color=DIVIDER, lw=0.8, alpha=0.35))
 
-                        def draw_radar(labels, A_r, B_r, ticks, headerA, subA, headerB, subB):
-                            N = len(labels)
-                            theta = np.linspace(0, 2*np.pi, N, endpoint=False)
-                            theta_c = np.concatenate([theta, theta[:1]])
-                            Ar = np.concatenate([A_r, A_r[:1]])
-                            Br = np.concatenate([B_r, B_r[:1]])
+    # --- panels (labels back to their original y offset) ---
+    def draw_panel(panel_top, title, tuples, *, show_xticks=False, draw_bottom_divider=True):
+        n = len(tuples); panel_h = header_h + n*row_slot
+        fig.text(LEFT, panel_top - 0.012, title, ha="left", va="top", color=TITLE_C, fontproperties=H2_FP)
 
-                            fig = plt.figure(figsize=(13.2, 8.0), dpi=260)
-                            fig.patch.set_facecolor(PAGE_BG)
-                            ax = plt.subplot(111, polar=True); ax.set_facecolor(AX_BG)
+        ax = fig.add_axes([LEFT + gutter, panel_top - header_h - n*row_slot, 1 - LEFT - RIGHT - gutter, n*row_slot])
+        ax.set_facecolor(AX_BG); ax.set_xlim(0,100); ax.set_ylim(-0.5,n-0.5)
+        for s in ax.spines.values(): s.set_visible(False)
+        ax.tick_params(axis="x", bottom=False, labelbottom=False, length=0)
+        ax.tick_params(axis="y", left=False,  labelleft=False,  length=0)
+        ax.set_yticks([]); ax.get_yaxis().set_visible(False)
 
-                            # Orientation like your original
-                            ax.set_theta_offset(np.pi/2)
-                            ax.set_theta_direction(-1)
+        for i in range(n):
+            ax.add_patch(plt.Rectangle((0, i-(BAR_FRAC/2)), 100, BAR_FRAC, color=TRACK, ec="none", zorder=0.5))
+        for gx in ticks:
+            ax.vlines(gx, -0.5, n-0.5, colors=(0,0,0,0.16), linewidth=0.8, zorder=0.75)
 
-                            ax.set_xticks(theta)
-                            ax.set_xticklabels([])  # custom labels below
-                            ax.set_yticks([])
-                            ax.grid(False)
-                            [s.set_visible(False) for s in ax.spines.values()]
+        for i,(lab,pct,val_str) in enumerate(tuples[::-1]):
+            y = i; bar_w = float(np.clip(pct,0,100))
+            ax.add_patch(plt.Rectangle((0, y-(BAR_FRAC/2)), bar_w, BAR_FRAC, color=pct_to_rgb(bar_w), ec="none", zorder=1.0))
+            x_text = 1.0 if bar_w >= 3 else min(100.0, bar_w + 0.8)
+            ax.text(x_text, y, val_str, ha="left", va="center", color="#0B0B0B", fontproperties=BAR_VALUE_FP, zorder=2.0, clip_on=False)
 
-                            # radial bands (10 bands from INNER_HOLE to 100)
-                            ring_edges = np.linspace(INNER_HOLE, 100, 11)
-                            for i in range(10):
-                                r0, r1 = ring_edges[i], ring_edges[i+1]
-                                band = GRID_BAND_OUTER if ((9 - i) % 2 == 0) else GRID_BAND_INNER
-                                ax.add_artist(Wedge(
-                                    (0,0), r1, 0, 360, width=(r1-r0),
-                                    transform=ax.transData._b, facecolor=band,
-                                    edgecolor="none", zorder=0.8
-                                ))
+        ax.axvline(50, color="#000000", ls=(0,(4,4)), lw=1.5, alpha=0.7, zorder=3.5)
 
-                            # ring outlines — ONLY the outermost ring brighter in dark theme
-                            ring_t = np.linspace(0, 2*np.pi, 361)
-                            for j, r in enumerate(ring_edges):
-                                col = RING_COLOR_OUTER if j == len(ring_edges)-1 else RING_COLOR_INNER
-                                ax.plot(ring_t, np.full_like(ring_t, r), color=col, lw=RING_LW, zorder=0.9)
+        for i,(lab,_,_) in enumerate(tuples[::-1]):
+            y_fig = (panel_top - header_h - n*row_slot) + ((i + 0.5) * row_slot)
+            fig.text(LEFT, y_fig, lab, ha="left", va="center", color=LABEL_C, fontproperties=LABEL_FP)
 
-                            # numeric tick labels at each ring = TRUE dataset quantiles (rounded to 1dp)
-                            start_idx = 2  # show from 20th to reduce clutter
-                            for i, ang in enumerate(theta):
-                                vals = ticks[i]
-                                for rr, v in zip(ring_edges[start_idx:], vals[start_idx:]):
-                                    ax.text(ang, rr-1.8, f"{float(v):.1f}",
-                                            ha="center", va="center",
-                                            fontsize=TICK_FS, color=TICK_COLOR, zorder=1.1)
+        if show_xticks:
+            trans = ax.get_xaxis_transform()
+            offset_inner   = ScaledTranslation(7/72,0,fig.dpi_scale_trans)
+            offset_pct_0   = ScaledTranslation(4/72,0,fig.dpi_scale_trans)
+            offset_pct_100 = ScaledTranslation(10/72,0,fig.dpi_scale_trans)
+            y_label = -0.075
+            for gx in ticks:
+                ax.plot([gx,gx],[-0.03,0.0], transform=trans, color=(0,0,0,0.6), lw=1.1, clip_on=False, zorder=4)
+                ax.text(gx, y_label, f"{int(gx)}", transform=trans, ha="center", va="top", color="#000", fontproperties=TICK_FP, zorder=4, clip_on=False)
+                if gx==0:   ax.text(gx, y_label, "%", transform=trans+offset_pct_0,   ha="left", va="top", color="#000", fontproperties=TICK_FP)
+                elif gx==100: ax.text(gx, y_label, "%", transform=trans+offset_pct_100, ha="left", va="top", color="#000", fontproperties=TICK_FP)
+                else:       ax.text(gx, y_label, "%", transform=trans+offset_inner,   ha="left", va="top", color="#000", fontproperties=TICK_FP)
 
-                            # --- Outside metric labels: centered, flipped only if upside-down, pushed further out ---
-                            OUTER_LABEL_R = 105.6  # distance from outer ring; try 105.0–107.0
-                            for ang, lab in zip(theta, labels):
-                                rot = _tangent_rotation(ax, ang)  # tangential angle in display space
-                                # Keep text upright: flip if rotation would be upside-down
-                                rot_norm = ((rot + 180.0) % 360.0) - 180.0
-                                if rot_norm > 90 or rot_norm < -90:
-                                    rot += 180.0
-                                ax.text(
-                                    ang, OUTER_LABEL_R, lab,
-                                    rotation=rot, rotation_mode="anchor",
-                                    ha="center", va="center",
-                                    fontsize=AXIS_FS, color=LABEL_COLOR, fontweight=600,
-                                    clip_on=False, zorder=2.2
-                                )
+        if draw_bottom_divider:
+            y0 = panel_top - panel_h - 0.008
+            fig.lines.append(plt.Line2D([LEFT, 1 - RIGHT], [y0, y0], transform=fig.transFigure, color=DIVIDER, lw=1.2, alpha=0.35))
+        return panel_top - panel_h - GAP
 
-                            # center hole
-                            ax.add_artist(Circle((0,0), radius=INNER_HOLE-0.6, transform=ax.transData._b,
-                                                 color=PAGE_BG, zorder=1.2, ec="none"))
+    y_top = 1 - TOP - header_block_h
+    for idx,(title,data) in enumerate(sections):
+        is_last = idx == len(sections)-1
+        y_top = draw_panel(y_top, title, data, show_xticks=is_last, draw_bottom_divider=not is_last)
 
-                            # A & B polygons (percentile radii)
-                            ax.plot(theta_c, Ar, color=COL_A, lw=2.2, zorder=3)
-                            ax.fill(theta_c, Ar, color=FILL_A, zorder=2.5)
-                            ax.plot(theta_c, Br, color=COL_B, lw=2.2, zorder=3)
-                            ax.fill(theta_c, Br, color=FILL_B, zorder=2.5)
+    fig.text((LEFT + gutter + (1 - RIGHT))/2.0, BOT * 0.1, footer_caption_text,
+             ha="center", va="center", color=LABEL_C, fontproperties=FOOTER_FP)
 
-                            # keep edge exactly at 100; labels allowed outside via clip_on=False
-                            ax.set_rlim(0, 100)
+    st.pyplot(fig, use_container_width=True)
 
-                            # headers (teams / leagues / minutes)
-                            # CHANGED: use "Minutes" column instead of "Minutes played"
-                            minsA = f"{int(pd.to_numeric(rowA.get('Minutes', 0))):,} mins" if pd.notna(rowA.get('Minutes')) else "Minutes: N/A"
-                            minsB = f"{int(pd.to_numeric(rowB.get('Minutes', 0))):,} mins" if pd.notna(rowB.get('Minutes')) else "Minutes: N/A"
-
-                            fig.text(0.12, 0.96,  headerA, color=COL_A, fontsize=TITLE_FS, fontweight="bold", ha="left")
-                            fig.text(0.12, 0.935, subA, color=COL_A, fontsize=SUB_FS, ha="left")
-                            fig.text(0.12, 0.915, minsA, color=MINUTES_CLR, fontsize=10, ha="left")
-
-                            fig.text(0.88, 0.96,  headerB, color=COL_B, fontsize=TITLE_FS, fontweight="bold", ha="right")
-                            fig.text(0.88, 0.935, subB, color=COL_B, fontsize=SUB_FS, ha="right")
-                            fig.text(0.88, 0.915, minsB, color=MINUTES_CLR, fontsize=10, ha="right")
-
-                            return fig
-
-                        fig_r = draw_radar(
-                            labels, A_r, B_r, axis_ticks,
-                            headerA=pA, subA=f"{rowA['Team']} — {rowA['League']}",
-                            headerB=pB, subB=f"{rowB['Team']} — {rowB['League']}",
-                        )
-
-                        # Editable footer caption
-                        st.caption(radar_caption)
-                        st.pyplot(fig_r, use_container_width=True)
-# ----------------- END Radar -----------------
-
-
+    buf = BytesIO(); fig.savefig(buf, format="png", dpi=(150 if enable_images else 130),
+                                 bbox_inches="tight", facecolor=fig.get_facecolor())
+    buf.seek(0)
+    st.download_button(
+        "⬇️ Download Feature Z (PNG)",
+        data=buf.getvalue(),
+        file_name=f"{str(name_).replace(' ','_')}_featureZ.png",
+        mime="image/png",
+        key=f"download_feature_z_{uuid.uuid4().hex}"
+    )
+    plt.close(fig)
+# ============================ END — Feature Z ============================
 
 
 # ============================== SCATTERPLOT — title, denser ticks, extra headroom ==============================
@@ -2928,6 +3001,12 @@ else:
     else:
         st.info("Pick a player to run Club Fit.")
 # ---------------------------- END Club Fit ----------------------------
+
+
+
+
+
+
 
 
 
