@@ -2370,6 +2370,7 @@ if radar_theme == "Dark":
     LABEL_COLOR = "#f5f5f5"
     TICK_COLOR  = "#e5e7eb"
     MINUTES_CLR = "#f5f5f5"
+    MEDIAN_LINE_COLOR = "#e5e7eb"   # high contrast in dark
 else:
     PAGE_BG = "#ffffff"
     AX_BG   = "#ebebeb"
@@ -2379,6 +2380,7 @@ else:
     LABEL_COLOR = "#0f172a"
     TICK_COLOR  = "#6b7280"
     MINUTES_CLR = "#374151"
+    MEDIAN_LINE_COLOR = "#111827"   # high contrast in light
 
 if player_row.empty:
     st.info("Pick a player above to draw the radar.")
@@ -2534,16 +2536,16 @@ else:
                             ax.add_artist(Circle((0,0), radius=INNER_HOLE-0.6, transform=ax.transData._b,
                                                  color=PAGE_BG, zorder=1.2, ec="none"))
 
-                            # 50th percentile line (if provided)
-                            if AVG_r is not None:
-                                Avg = np.concatenate([AVG_r, AVG_r[:1]])
-                                ax.plot(theta_c, Avg, lw=1.5, color="#94A3B8", ls="--", alpha=0.9, zorder=2.2)
-
                             # A & B polygons (percentile radii)
                             ax.plot(theta_c, Ar, color=COL_A, lw=2.2, zorder=3)
                             ax.fill(theta_c, Ar, color=FILL_A, zorder=2.5)
                             ax.plot(theta_c, Br, color=COL_B, lw=2.2, zorder=3)
                             ax.fill(theta_c, Br, color=FILL_B, zorder=2.5)
+
+                            # 50th percentile line (plot on TOP for visibility)
+                            if AVG_r is not None:
+                                Avg = np.concatenate([AVG_r, AVG_r[:1]]).astype(float)
+                                ax.plot(theta_c, Avg, lw=2.0, color=MEDIAN_LINE_COLOR, ls="--", alpha=1.0, zorder=4)
 
                             # keep edge exactly at 100; labels allowed outside via clip_on=False
                             ax.set_rlim(0, 100)
@@ -2566,11 +2568,12 @@ else:
                             labels, A_r, B_r, axis_ticks,
                             headerA=pA, subA=f"{rowA['Team']} — {rowA['League']}",
                             headerB=pB, subB=f"{rowB['Team']} — {rowB['League']}",
-                            AVG_r=AVG_r  # <-- Pass the 50th percentile line
+                            AVG_r=AVG_r  # <-- visible 50th percentile ring
                         )
                         st.caption(
                             "Ring labels show the **actual dataset values** at each decile (0–100th), rounded to **1 decimal place**. "
-                            "Axis labels are centered on their metric angle, auto-flipped upright, and placed outside the 100 ring."
+                            "Axis labels are centered on their metric angle, auto-flipped upright, and placed outside the 100 ring. "
+                            "The dashed ring marks the **50th percentile** across all axes."
                         )
                         st.pyplot(fig_r, use_container_width=True)
 # ----------------- END Radar -----------------
