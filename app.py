@@ -1642,7 +1642,7 @@ def _font_name_or_fallback(pref, fallback="DejaVu Sans"):
 
 FONT_TITLE_FAMILY = _font_name_or_fallback(["Tableau Bold","Tableau Sans Bold","Tableau"])
 FONT_BOOK_FAMILY  = _font_name_or_fallback(["Tableau Book","Tableau Sans","Tableau"])
-TITLE_FP     = FontProperties(family=FONT_TITLE_FAMILY, weight='bold',     size=22)
+TITLE_FP     = FontProperties(family=FONT_TITLE_FAMILY, weight='bold',     size=24)
 H2_FP        = FontProperties(family=FONT_TITLE_FAMILY, weight='semibold', size=20)
 LABEL_FP     = FontProperties(family=FONT_BOOK_FAMILY,  weight='medium',   size=10)
 INFO_LABEL_FP= FontProperties(family=FONT_BOOK_FAMILY,  weight='bold',     size=10)
