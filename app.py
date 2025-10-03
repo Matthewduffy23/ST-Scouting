@@ -1785,9 +1785,9 @@ else:
         row3 = [("Minutes: ",minutes), ("Foot: ",foot)]  # CHANGED label
 
         title_y = 1 - TOP - 0.010
-        y1 = title_y - 0.048
-        y2 = y1 - 0.032
-        y3 = y2 - 0.032
+        y1 = title_y - 0.055
+        y2 = y1 - 0.039
+        y3 = y2 - 0.039
 
         draw_pairs_line(row1, y1)
         draw_pairs_line(row2, y2)
